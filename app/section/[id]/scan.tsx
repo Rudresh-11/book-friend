@@ -71,6 +71,21 @@ export default function ScanScreen() {
     }
   };
 
+  const addTextOnlyPage = () => {
+    const id = addPage(section.id, {
+      uri: '',
+      label: nextLabel(),
+      spread: false,
+      text: '',
+      textSource: 'none',
+    });
+    const created = useLibrary.getState().sections.find((x) => x.id === section.id)?.pages.find((x) => x.id === id);
+    if (created) {
+      setEditingText(created);
+      setDraft('');
+    }
+  };
+
   const runOcr = async (page: PageShot) => {
     setBusy(page.id);
     const res = await recognizeText(page.uri);
@@ -83,7 +98,7 @@ export default function ScanScreen() {
   };
 
   const runOcrAll = async () => {
-    const pending = section.pages.filter((p) => !p.text.trim());
+    const pending = section.pages.filter((p) => !p.text.trim() && p.uri);
     if (!pending.length) return;
     for (const page of pending) {
       setBusy(page.id);
@@ -98,7 +113,7 @@ export default function ScanScreen() {
   };
 
   const confirmRemove = (page: PageShot) =>
-    Alert.alert('Remove this scan?', 'The photo and its text are deleted.', [
+    Alert.alert('Remove this page?', 'The photo, if there is one, and its text are deleted.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
@@ -121,6 +136,12 @@ export default function ScanScreen() {
           <Button style={{ flex: 1 }} icon="camera" label="Take photo" onPress={() => capture('camera')} />
           <Button style={{ flex: 1 }} variant="soft" icon="images-outline" label="From gallery" onPress={() => capture('library')} />
         </Row>
+        <Button
+          variant="ghost"
+          icon="document-text-outline"
+          label="Add a page without a photo"
+          onPress={addTextOnlyPage}
+        />
 
         {section.pages.length > 0 ? (
           <Card style={{ gap: 10 }}>
@@ -128,7 +149,7 @@ export default function ScanScreen() {
               <View>
                 <Label>Text extraction</Label>
                 <Body muted style={{ fontSize: 13 }}>
-                  {withText}/{section.pages.length} scans have text
+                  {withText}/{section.pages.length} pages have text
                   {totalWords ? ` · ${totalWords.toLocaleString()} words` : ''}
                 </Body>
               </View>
@@ -169,25 +190,57 @@ export default function ScanScreen() {
         {section.pages.length === 0 ? (
           <Card>
             <Body muted>
-              No scans yet. Photograph the pages as you read — hold the phone above an open book and one shot can catch
-              both pages at once.
+              No pages yet. Photograph them as you read — hold the phone above an open book and one shot can catch both
+              pages at once. You can also keep a page as text only, with no photo, just to mark where you are.
             </Body>
+            <Button
+              small
+              variant="soft"
+              icon="sparkles-outline"
+              label="Transcribe with AI"
+              style={{ marginTop: 12 }}
+              onPress={() =>
+                router.push({
+                  pathname: '/ai',
+                  params: { kind: 'transcribe', bookId: section.bookId, sectionId: section.id },
+                })
+              }
+            />
           </Card>
         ) : null}
 
         {section.pages.map((page, i) => (
           <Card key={page.id} style={{ gap: 10 }}>
             <Row gap={12} style={{ alignItems: 'flex-start' }}>
-              <Pressable onPress={() => setViewing(page)}>
-                <Image
-                  source={{ uri: page.uri }}
-                  style={{ width: 76, height: 100, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
-                  contentFit="cover"
-                />
+              <Pressable onPress={() => (page.uri ? setViewing(page) : null)} disabled={!page.uri}>
+                {page.uri ? (
+                  <Image
+                    source={{ uri: page.uri }}
+                    style={{ width: 76, height: 100, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View
+                    style={{
+                      width: 76,
+                      height: 100,
+                      borderRadius: radius.sm,
+                      backgroundColor: t.cardAlt,
+                      borderWidth: 1,
+                      borderColor: t.border,
+                      borderStyle: 'dashed',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                    }}>
+                    <Ionicons name="document-text-outline" size={20} color={t.faint} />
+                    <Body muted style={{ fontSize: 10 }}>no photo</Body>
+                  </View>
+                )}
               </Pressable>
               <View style={{ flex: 1, gap: 8 }}>
                 <Row style={{ justifyContent: 'space-between' }}>
-                  <Label>Scan {i + 1}</Label>
+                  <Label>{page.uri ? 'Scan' : 'Page'} {i + 1}</Label>
                   <Pressable onPress={() => confirmRemove(page)} hitSlop={8}>
                     <Ionicons name="trash-outline" size={17} color={t.danger} />
                   </Pressable>
@@ -205,7 +258,9 @@ export default function ScanScreen() {
                       size={17}
                       color={page.spread ? t.accent : t.faint}
                     />
-                    <Body muted style={{ fontSize: 13 }}>Two pages in this photo</Body>
+                    <Body muted style={{ fontSize: 13 }}>
+                      {page.uri ? 'Two pages in this photo' : 'Covers two pages'}
+                    </Body>
                   </Row>
                 </Pressable>
               </View>
@@ -239,14 +294,16 @@ export default function ScanScreen() {
               </View>
             ) : (
               <Row gap={8}>
-                <Button
-                  small
-                  variant="soft"
-                  icon="scan-outline"
-                  label={busy === page.id ? 'Reading…' : 'Extract text'}
-                  loading={busy === page.id}
-                  onPress={() => runOcr(page)}
-                />
+                {page.uri ? (
+                  <Button
+                    small
+                    variant="soft"
+                    icon="scan-outline"
+                    label={busy === page.id ? 'Reading…' : 'Extract text'}
+                    loading={busy === page.id}
+                    onPress={() => runOcr(page)}
+                  />
+                ) : null}
                 <Button
                   small
                   variant="ghost"

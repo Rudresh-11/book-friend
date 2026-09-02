@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -211,6 +211,38 @@ export function Progress({ ratio, height = 6 }: { ratio: number; height?: number
           backgroundColor: t.accent,
         }}
       />
+    </View>
+  );
+}
+
+/** Long text that collapses to a few lines with a "Show more" toggle. */
+export function Collapsible({
+  text,
+  lines = 4,
+  threshold = 220,
+  style,
+}: {
+  text: string;
+  lines?: number;
+  threshold?: number;
+  style?: StyleProp<TextStyle>;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const long = text.length > threshold;
+
+  return (
+    <View style={{ gap: 6 }}>
+      <Body selectable numberOfLines={long && !open ? lines : undefined} style={style}>
+        {text}
+      </Body>
+      {long ? (
+        <Pressable onPress={() => setOpen((v) => !v)} hitSlop={6}>
+          <Text style={{ color: t.accent, fontSize: 13, fontWeight: '700' }}>
+            {open ? 'Show less' : `Show more (${text.length.toLocaleString()} characters)`}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

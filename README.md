@@ -13,7 +13,9 @@ cantos, lessons — and each one is marked unread / reading / read.
 
 **Photograph the pages.** Point the camera at an open book; one photo can hold a
 two-page spread, and there is a checkbox saying so. Photos are copied out of the
-OS cache into permanent storage so they survive.
+OS cache into permanent storage so they survive. A page does not need a photo at
+all — you can add a text-only page, or let a transcription create one, just to
+mark how far you have got.
 
 **Pull the text out of the photos.** On-device text recognition (Google ML Kit)
 reads the scans with nothing leaving the phone. It de-hyphenates words split across
@@ -35,6 +37,11 @@ all appear in their own places. Seven prompts ship with it:
 | Go deeper | Themes, symbolism, discussion questions |
 | Outline the book | Blurb, genre, tags and the whole chapter list — creates the chapters for you |
 | Story so far | One running summary of the book up to where you are |
+
+After you apply a reply you get a receipt: one small card per thing that was saved,
+saying where in the app it landed — long text collapses behind "Show more", long
+lists behind "Show N more", and merged lists say plainly how much was actually new
+("1 new, 2 already there").
 
 The parser is deliberately forgiving: it digs the JSON out of a code fence or out of
 a chatty "Sure, here you go!" reply, repairs trailing commas and smart quotes, and

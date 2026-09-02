@@ -4,9 +4,10 @@ import * as Haptics from 'expo-haptics';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
-import { Body, Button, Card, Chip, Field, Label, Row, SectionHeading, Title } from '../src/components/ui';
+import { Body, Button, Card, Chip, Collapsible, Field, Label, Row, SectionHeading, Title } from '../src/components/ui';
 import { goBack } from '../src/lib/nav';
-import { describeChanges, parseAiResponse, type AiPayload } from '../src/lib/parse';
+import { wordCount } from '../src/lib/ocr';
+import { describeChanges, parseAiResponse } from '../src/lib/parse';
 import { buildPrompt, PROMPTS, type PromptKind } from '../src/lib/prompts';
 import { sectionsOf, useLibrary } from '../src/store';
 import { radius, useTheme } from '../src/theme';
@@ -21,7 +22,7 @@ export default function AiBridge() {
   const [kind, setKind] = useState<PromptKind>((params.kind as PromptKind) ?? 'section');
   const [reply, setReply] = useState('');
   const [copied, setCopied] = useState(false);
-  const [applied, setApplied] = useState<string[] | null>(null);
+  const [applied, setApplied] = useState<Saved[] | null>(null);
   const [replaceChapters, setReplaceChapters] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
 
@@ -64,87 +65,239 @@ export default function AiBridge() {
   const apply = () => {
     if (!parsed?.ok) return;
     const d = parsed.data;
-    const changes = describeChanges(d);
+    const report: Saved[] = [];
+    const add = (entry: Saved) => report.push(entry);
 
     /* ---- book-level fields ---- */
     const bookPatch: Record<string, unknown> = {};
     if (kind === 'outline') {
-      if (d.title) bookPatch.title = d.title;
-      if (d.author) bookPatch.author = d.author;
-      if (d.genre) bookPatch.genre = d.genre;
-      if (d.blurb) bookPatch.blurb = d.blurb;
-      if (d.tags?.length) bookPatch.tags = Array.from(new Set([...book.tags, ...d.tags]));
-      if (d.totalPages) bookPatch.totalPages = d.totalPages;
+      const details: Pair[] = [];
+      if (d.title && d.title !== book.title) {
+        bookPatch.title = d.title;
+        details.push({ k: 'Title', v: `${book.title} → ${d.title}` });
+      }
+      if (d.author && d.author !== book.author) {
+        bookPatch.author = d.author;
+        details.push({ k: 'Author', v: d.author });
+      }
+      if (d.genre) {
+        bookPatch.genre = d.genre;
+        details.push({ k: 'Genre', v: d.genre });
+      }
+      if (d.totalPages) {
+        bookPatch.totalPages = d.totalPages;
+        details.push({ k: 'Pages', v: String(d.totalPages) });
+      }
+      if (details.length) add({ title: 'Book details', where: 'on the book', pairs: details });
+
+      if (d.blurb) {
+        bookPatch.blurb = d.blurb;
+        add({ title: 'Blurb', where: 'on the book', body: d.blurb, note: book.blurb ? 'replaced the old blurb' : undefined });
+      }
+      if (d.tags?.length) {
+        const merged = merge(book.tags, d.tags);
+        bookPatch.tags = merged;
+        add({
+          title: 'Tags',
+          where: 'on the book',
+          items: d.tags,
+          note: countNote(book.tags.length, merged.length, d.tags.length),
+        });
+      }
     }
-    if (d.storySoFar) bookPatch.storySoFar = d.storySoFar;
-    if (kind === 'recap' && !section && d.recap) bookPatch.storySoFar = book.storySoFar || d.recap;
+    if (d.storySoFar) {
+      bookPatch.storySoFar = d.storySoFar;
+      add({
+        title: 'Story so far',
+        where: 'on the book',
+        body: d.storySoFar,
+        note: book.storySoFar ? 'replaced the previous one' : undefined,
+      });
+    }
+    if (kind === 'recap' && !section && d.recap && !d.storySoFar) {
+      bookPatch.storySoFar = d.recap;
+      add({ title: 'Recap', where: 'saved as the book’s story so far', body: d.recap });
+    }
     if (Object.keys(bookPatch).length) store.updateBook(book.id, bookPatch as any);
 
     /* ---- chapters from an outline ---- */
     if (kind === 'outline' && d.sections?.length) {
       if (replaceChapters) siblings.forEach((s) => store.removeSection(s.id));
-      store.addSections(
-        book.id,
-        d.sections.map((s) => ({
-          kind: (s.kind as SectionKind) || state.settings.defaultKind,
-          number: s.number ?? '',
-          title: s.title ?? '',
-        }))
-      );
+      const made = d.sections.map((s) => ({
+        kind: (s.kind as SectionKind) || state.settings.defaultKind,
+        number: s.number ?? '',
+        title: s.title ?? '',
+      }));
+      store.addSections(book.id, made);
+      add({
+        title: 'Chapters',
+        where: 'in the chapter list',
+        items: made.map((s) => [s.kind, s.number, s.title && `— ${s.title}`].filter(Boolean).join(' ')),
+        note: replaceChapters
+          ? `replaced the ${siblings.length} chapters that were there`
+          : siblings.length
+            ? `added after the ${siblings.length} you already had`
+            : undefined,
+      });
     }
 
     /* ---- transcription lands on the page scans ---- */
     if (kind === 'transcribe' && section && d.pages?.length) {
       const untouched = [...section.pages];
-      d.pages.forEach((p, i) => {
+      const onto: string[] = [];
+      let created = 0;
+      d.pages.forEach((p) => {
         const byLabel = p.label ? untouched.find((x) => x.label === p.label) : undefined;
-        const target = byLabel ?? untouched.find((x) => !x.text.trim()) ?? untouched[i];
-        if (!target) return;
-        store.updatePage(section.id, target.id, { text: p.text, textSource: 'ai', label: target.label || p.label || '' });
-        const idx = untouched.indexOf(target);
-        if (idx >= 0) untouched.splice(idx, 1);
+        const target = byLabel ?? untouched.find((x) => !x.text.trim());
+        const words = wordCount(p.text);
+        if (target) {
+          store.updatePage(section.id, target.id, {
+            text: p.text,
+            textSource: 'ai',
+            label: target.label || p.label || '',
+          });
+          untouched.splice(untouched.indexOf(target), 1);
+          onto.push(`p. ${target.label || p.label || '?'} · ${words} words → existing scan`);
+        } else {
+          // No photo waiting for this text, so keep the page as a text-only entry.
+          store.addPage(section.id, {
+            uri: '',
+            label: p.label ?? '',
+            spread: !!p.label && /\d\s*[-–]\s*\d/.test(p.label),
+            text: p.text,
+            textSource: 'ai',
+          });
+          created += 1;
+          onto.push(`p. ${p.label || '?'} · ${words} words → new page, no photo`);
+        }
+      });
+      add({
+        title: 'Transcribed pages',
+        where: 'in page scans',
+        items: onto,
+        note: created ? `${created} added as text-only pages` : undefined,
       });
     }
 
     /* ---- everything else lands on the chapter ---- */
     if (section && kind !== 'transcribe') {
       const patch: Record<string, unknown> = { aiUpdatedAt: Date.now() };
-      if (d.title && !section.title) patch.title = d.title;
-      if (d.recap) patch.recap = d.recap;
-      if (d.summary) patch.summary = d.summary;
-      if (d.mood) patch.mood = d.mood;
-      if (d.difficulty) patch.difficulty = d.difficulty;
-      if (d.keyPoints?.length) patch.keyPoints = merge(section.keyPoints, d.keyPoints);
-      if (d.themes?.length) patch.themes = merge(section.themes, d.themes);
-      if (d.characters?.length)
-        patch.characters = mergeBy([...section.characters, ...d.characters.map((c) => ({ name: c.name, note: c.note ?? '' }))], (c) => c.name);
-      if (d.quotes?.length)
-        patch.quotes = mergeBy([...section.quotes, ...d.quotes.map((q) => ({ text: q.text, page: q.page, note: q.note }))], (q) => q.text);
-      if (d.vocabulary?.length)
-        patch.vocabulary = mergeBy([...section.vocabulary, ...d.vocabulary.map((v) => ({ word: v.word, meaning: v.meaning ?? '' }))], (v) => v.word.toLowerCase());
-      if (d.notes) patch.myNotes = [section.myNotes, d.notes].filter(Boolean).join('\n\n');
+
+      if (d.title && !section.title) {
+        patch.title = d.title;
+        add({ title: 'Chapter title', where: 'on this chapter', body: d.title });
+      }
+      if (d.recap) {
+        patch.recap = d.recap;
+        add({ title: 'Recap', where: 'on this chapter', body: d.recap, note: section.recap ? 'replaced the old recap' : undefined });
+      }
+      if (d.summary) {
+        patch.summary = d.summary;
+        add({ title: 'Summary', where: 'on this chapter', body: d.summary, note: section.summary ? 'replaced the old summary' : undefined });
+      }
+      if (d.mood || d.difficulty) {
+        if (d.mood) patch.mood = d.mood;
+        if (d.difficulty) patch.difficulty = d.difficulty;
+        add({
+          title: 'Reading feel',
+          where: 'on this chapter',
+          pairs: [
+            ...(d.mood ? [{ k: 'Mood', v: d.mood }] : []),
+            ...(d.difficulty ? [{ k: 'Difficulty', v: `${d.difficulty}/5` }] : []),
+          ],
+        });
+      }
+      if (d.keyPoints?.length) {
+        const merged = merge(section.keyPoints, d.keyPoints);
+        patch.keyPoints = merged;
+        add({ title: 'Key points', where: 'on this chapter', items: d.keyPoints, note: countNote(section.keyPoints.length, merged.length, d.keyPoints.length) });
+      }
+      if (d.themes?.length) {
+        const merged = merge(section.themes, d.themes);
+        patch.themes = merged;
+        add({ title: 'Themes', where: 'on this chapter', items: d.themes, note: countNote(section.themes.length, merged.length, d.themes.length) });
+      }
+      if (d.characters?.length) {
+        const incoming = d.characters.map((c) => ({ name: c.name, note: c.note ?? '' }));
+        const merged = mergeBy([...section.characters, ...incoming], (c) => c.name);
+        patch.characters = merged;
+        add({
+          title: "Who's who",
+          where: 'on this chapter',
+          pairs: incoming.map((c) => ({ k: c.name, v: c.note })),
+          note: countNote(section.characters.length, merged.length, incoming.length),
+        });
+      }
+      if (d.quotes?.length) {
+        const incoming = d.quotes.map((q) => ({ text: q.text, page: q.page, note: q.note }));
+        const merged = mergeBy([...section.quotes, ...incoming], (q) => q.text);
+        patch.quotes = merged;
+        add({
+          title: 'Lines worth keeping',
+          where: 'on this chapter',
+          items: incoming.map((q) => (q.page ? `“${q.text}” (p. ${q.page})` : `“${q.text}”`)),
+          note: countNote(section.quotes.length, merged.length, incoming.length),
+        });
+      }
+      if (d.vocabulary?.length) {
+        const incoming = d.vocabulary.map((v) => ({ word: v.word, meaning: v.meaning ?? '' }));
+        const merged = mergeBy([...section.vocabulary, ...incoming], (v) => v.word.toLowerCase());
+        patch.vocabulary = merged;
+        add({
+          title: 'Words',
+          where: 'on this chapter',
+          pairs: incoming.map((v) => ({ k: v.word, v: v.meaning })),
+          note: countNote(section.vocabulary.length, merged.length, incoming.length),
+        });
+      }
+      if (d.notes) {
+        patch.myNotes = [section.myNotes, d.notes].filter(Boolean).join('\n\n');
+        add({ title: 'Deeper reading', where: 'added to my notes', body: d.notes });
+      }
       store.updateSection(section.id, patch as any);
-      if (d.cards?.length) store.addCards(section.id, d.cards.map((c) => ({ q: c.q, a: c.a ?? '' })));
-    } else if (!section && d.recap && kind === 'recap') {
-      // a book-level recap is kept on the book itself
-      store.updateBook(book.id, { storySoFar: d.recap });
+
+      if (d.cards?.length) {
+        const cards = d.cards.map((c) => ({ q: c.q, a: c.a ?? '' }));
+        store.addCards(section.id, cards);
+        add({
+          title: 'Review cards',
+          where: 'in the Review tab',
+          pairs: cards.map((c) => ({ k: c.q, v: c.a })),
+          note: `all ${cards.length} are due straight away`,
+        });
+      }
     }
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    setApplied(changes.length ? changes : ['nothing recognisable']);
+    setApplied(report);
   };
 
   /* ---------- applied confirmation ---------- */
   if (applied) {
+    const summary = applied.length
+      ? applied.map((s) => s.title.toLowerCase()).join(', ')
+      : 'nothing the app recognised';
     return (
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }}>
-        <Stack.Screen options={{ title: 'Updated' }} />
-        <View style={{ alignItems: 'center', gap: 10, paddingVertical: 24 }}>
-          <Ionicons name="checkmark-circle" size={56} color={t.good} />
-          <Title style={{ textAlign: 'center' }}>Saved to your journal</Title>
-          <Body muted style={{ textAlign: 'center' }}>Updated: {applied.join(', ')}.</Body>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48, gap: 12 }}>
+        <Stack.Screen options={{ title: 'Saved' }} />
+        <View style={{ alignItems: 'center', gap: 8, paddingVertical: 20 }}>
+          <Ionicons name={applied.length ? 'checkmark-circle' : 'alert-circle'} size={52} color={applied.length ? t.good : t.danger} />
+          <Title style={{ textAlign: 'center' }}>
+            {applied.length ? 'Saved to your journal' : 'Nothing to save'}
+          </Title>
+          <Body muted style={{ textAlign: 'center' }}>
+            {applied.length
+              ? `${applied.length} ${applied.length === 1 ? 'thing' : 'things'} updated — ${summary}.`
+              : 'That reply had nothing the app could file. Ask the AI to answer with only the JSON object and try again.'}
+          </Body>
         </View>
+
+        {applied.map((entry, i) => (
+          <SavedCard key={i} entry={entry} />
+        ))}
+
         <Button
+          style={{ marginTop: 8 }}
           label={section ? 'Back to the chapter' : 'Back to the book'}
           icon="arrow-back"
           onPress={() => goBack(section ? `/section/${section.id}` : `/book/${book.id}`)}
@@ -257,6 +410,76 @@ export default function AiBridge() {
         </Card>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+/* ---------- the "here is what was saved" receipt ---------- */
+
+type Pair = { k: string; v: string };
+type Saved = {
+  title: string;
+  /** where in the app it landed */
+  where: string;
+  note?: string;
+  body?: string;
+  items?: string[];
+  pairs?: Pair[];
+};
+
+/** "3 new, 1 was already there" — merged lists only ever grow. */
+function countNote(before: number, after: number, incoming: number) {
+  const added = after - before;
+  if (added === incoming) return undefined;
+  const dupes = incoming - added;
+  return added === 0
+    ? `all ${incoming} were already there`
+    : `${added} new, ${dupes} already there`;
+}
+
+function SavedCard({ entry }: { entry: Saved }) {
+  const t = useTheme();
+  const [showAll, setShowAll] = useState(false);
+  const LIMIT = 4;
+
+  const list = entry.items ?? [];
+  const pairs = entry.pairs ?? [];
+  const overflow = Math.max(list.length, pairs.length) - LIMIT;
+  const shownItems = showAll ? list : list.slice(0, LIMIT);
+  const shownPairs = showAll ? pairs : pairs.slice(0, LIMIT);
+
+  return (
+    <Card style={{ gap: 10 }}>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Label>{entry.title}</Label>
+        <Body muted style={{ fontSize: 11 }}>{entry.where}</Body>
+      </Row>
+
+      {entry.body ? <Collapsible text={entry.body} /> : null}
+
+      {shownItems.map((item, i) => (
+        <Row key={i} gap={8} style={{ alignItems: 'flex-start' }}>
+          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: t.accent, marginTop: 8 }} />
+          <Body style={{ flex: 1, fontSize: 14 }}>{item}</Body>
+        </Row>
+      ))}
+
+      {shownPairs.map((p, i) => (
+        <View key={i} style={{ gap: 1 }}>
+          <Body style={{ fontWeight: '700', fontSize: 14 }}>{p.k}</Body>
+          {p.v ? <Body muted style={{ fontSize: 13 }}>{p.v}</Body> : null}
+        </View>
+      ))}
+
+      {overflow > 0 ? (
+        <Pressable onPress={() => setShowAll((v) => !v)} hitSlop={6}>
+          <Body style={{ color: t.accent, fontSize: 13, fontWeight: '700' }}>
+            {showAll ? 'Show less' : `Show ${overflow} more`}
+          </Body>
+        </Pressable>
+      ) : null}
+
+      {entry.note ? <Body muted style={{ fontSize: 12, fontStyle: 'italic' }}>{entry.note}</Body> : null}
+    </Card>
   );
 }
 

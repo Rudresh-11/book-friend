@@ -172,11 +172,33 @@ export default function SectionScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               {section.pages.map((p) => (
                 <Pressable key={p.id} onPress={() => router.push(`/section/${section.id}/scan`)}>
-                  <Image
-                    source={{ uri: p.uri }}
-                    style={{ width: 84, height: 112, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
-                    contentFit="cover"
-                  />
+                  {p.uri ? (
+                    <Image
+                      source={{ uri: p.uri }}
+                      style={{ width: 84, height: 112, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 84,
+                        height: 112,
+                        borderRadius: radius.sm,
+                        backgroundColor: t.cardAlt,
+                        borderWidth: 1,
+                        borderColor: t.border,
+                        borderStyle: 'dashed',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 6,
+                        gap: 4,
+                      }}>
+                      <Ionicons name="document-text-outline" size={20} color={t.faint} />
+                      <Body muted style={{ fontSize: 10, textAlign: 'center' }} numberOfLines={2}>
+                        {p.text ? `${wordCount(p.text)} words` : 'no photo'}
+                      </Body>
+                    </View>
+                  )}
                   <Body muted style={{ fontSize: 11, marginTop: 4 }}>
                     {p.label || '—'} {p.text ? '· text' : ''}
                   </Body>

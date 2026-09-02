@@ -107,7 +107,7 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         header(book, section, settings),
         '',
         'I am attaching photos of the pages of this book. Some photos show a two-page spread — read the left page fully, then the right page.',
-        'Transcribe the text exactly as printed. Keep paragraph breaks. Do not summarise, correct, translate or comment. Repair words split by hyphens at line ends. Ignore headers, footers and page numbers, but record the page numbers you see.',
+        'Transcribe the text exactly as printed. Keep paragraph breaks. Do not summarise, correct, translate or comment. Repair words split by hyphens at line ends. Ignore headers, footers and page numbers in the text itself, but do put the page numbers you see in the "label" field — I use those to track where I am, so give me one entry per photo even if you can only read part of it.',
         '',
         JSON_RULES,
         'Shape:',
