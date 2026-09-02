@@ -1,25 +1,52 @@
 {
   "expo": {
-    "name": "book-friend",
+    "name": "Book Friend",
     "slug": "book-friend",
+    "scheme": "bookfriend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bookfriend.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Book Friend uses the camera so you can photograph the pages you are reading.",
+        "NSPhotoLibraryUsageDescription": "Book Friend reads photos from your library so you can attach page scans to a chapter."
+      }
     },
     "android": {
+      "package": "com.bookfriend.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-image",
+      "expo-sharing",
+      "expo-splash-screen",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Book Friend reads photos from your library so you can attach page scans to a chapter.",
+          "cameraPermission": "Book Friend uses the camera so you can photograph the pages you are reading."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
     }
   }
 }
