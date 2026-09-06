@@ -28,7 +28,7 @@ export default function EditBook() {
 
   const pickCover = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!res.canceled && res.assets?.[0]) setCover(persistPhoto(res.assets[0].uri, `cover-${uid()}`));
+    if (!res.canceled && res.assets?.[0]) setCover(await persistPhoto(res.assets[0].uri, `cover-${uid()}`));
   };
 
   const save = () => {

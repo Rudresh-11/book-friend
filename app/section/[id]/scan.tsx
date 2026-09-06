@@ -4,8 +4,9 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Field, Label, Row, Title } from '../../../src/components/ui';
+import { notify } from '../../../src/lib/alert';
 import { deletePhoto, persistPhoto } from '../../../src/lib/files';
 import { isOcrAvailable, recognizeText, wordCount } from '../../../src/lib/ocr';
 import { sectionLabel, uid, useLibrary } from '../../../src/store';
@@ -38,7 +39,7 @@ export default function ScanScreen() {
     try {
       if (from === 'camera') {
         const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) return Alert.alert('Camera permission needed', 'Allow camera access to photograph pages.');
+        if (!perm.granted) return notify('Camera permission needed', 'Allow camera access to photograph pages.');
       }
       const res =
         from === 'camera'
@@ -49,7 +50,7 @@ export default function ScanScreen() {
       let label = nextLabel();
       for (const asset of res.assets) {
         const pid = uid();
-        const uri = persistPhoto(asset.uri, pid);
+        const uri = await persistPhoto(asset.uri, pid);
         const spread = !!asset.width && !!asset.height && asset.width > asset.height;
         addPage(section.id, {
           uri,
@@ -67,7 +68,7 @@ export default function ScanScreen() {
         }
       }
     } catch (e: any) {
-      Alert.alert('Could not add that photo', e?.message ?? 'Unknown error');
+      notify('Could not add that photo', e?.message ?? 'Unknown error');
     }
   };
 
@@ -93,7 +94,7 @@ export default function ScanScreen() {
     if (res.ok) {
       updatePage(section.id, page.id, { text: res.text, textSource: 'ocr' });
     } else {
-      Alert.alert(res.reason === 'unavailable' ? 'Scanning not available here' : 'Nothing readable', res.message);
+      notify(res.reason === 'unavailable' ? 'Scanning not available here' : 'Nothing readable', res.message);
     }
   };
 
@@ -106,14 +107,14 @@ export default function ScanScreen() {
       if (res.ok) updatePage(section.id, page.id, { text: res.text, textSource: 'ocr' });
       else if (res.reason === 'unavailable') {
         setBusy(null);
-        return Alert.alert('Scanning not available here', res.message);
+        return notify('Scanning not available here', res.message);
       }
     }
     setBusy(null);
   };
 
   const confirmRemove = (page: PageShot) =>
-    Alert.alert('Remove this page?', 'The photo, if there is one, and its text are deleted.', [
+    notify('Remove this page?', 'The photo, if there is one, and its text are deleted.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',

@@ -64,9 +64,62 @@ const JSON_RULES = [
   'Use "" or [] for anything you cannot fill in. Never invent page numbers or events that are not in the text.',
 ].join(' ');
 
-function clip(text: string, max = 14000) {
-  if (text.length <= max) return text;
-  return text.slice(0, max) + '\n\n[...text truncated for length...]';
+const MAX_CHAPTER_CHARS = 15000;
+
+/**
+ * When a chapter runs long, drop whole pages off the START rather than cutting
+ * the END. This prompt is pasted into an ongoing AI chat, so the AI already has
+ * the earlier pages from earlier turns in that same conversation — what it's
+ * missing, if anything gets cut, is where the chapter finishes, which is the
+ * part actually worth keeping.
+ */
+function clipToTail(section: Section, max = MAX_CHAPTER_CHARS) {
+  const pages = section.pages.filter((p) => p.text.trim());
+  const render = (list: typeof pages) =>
+    list.map((p) => (p.label ? `[p. ${p.label}]\n${p.text.trim()}` : p.text.trim())).join('\n\n');
+
+  let dropped = 0;
+  let text = render(pages);
+  const fits = text.length <= max;
+  while (text.length > max && dropped < pages.length - 1) {
+    dropped += 1;
+    text = render(pages.slice(dropped));
+  }
+  // A single page longer than the whole budget still needs a hard cut — keep its end.
+  const hardCut = text.length > max;
+  if (hardCut) text = text.slice(text.length - max);
+
+  return { text, truncated: !fits, dropped };
+}
+
+/**
+ * One line per earlier chapter, for the recap / story-so-far prompts. Prefers the
+ * saved AI summary or recap; if a chapter has neither (nothing has been applied
+ * for it yet) it falls back to that chapter's own raw page text instead of
+ * skipping it, so recap isn't just "(nothing summarised yet)" the moment you
+ * haven't run "Summarise this chapter" on everything. If there's nothing to say
+ * about any earlier chapter at all, falls back to the pages read so far in the
+ * current chapter, since that's read material too.
+ */
+function buildPriorContext(previous: Section[], current?: Section) {
+  const lines = previous
+    .map((s) => {
+      if (s.summary || s.recap) return `- ${sectionLabel(s)}: ${(s.summary || s.recap).replace(/\s+/g, ' ').slice(0, 700)}`;
+      const raw = sectionText(s).trim();
+      return raw ? `- ${sectionLabel(s)} (not summarised yet, raw page text): ${raw.replace(/\s+/g, ' ').slice(0, 700)}` : null;
+    })
+    .filter((line): line is string => !!line);
+
+  if (!lines.length && current) {
+    const raw = sectionText(current).trim();
+    if (raw) {
+      lines.push(
+        `- ${sectionLabel(current)} so far (not summarised yet, raw page text): ${raw.replace(/\s+/g, ' ').slice(-700)}`
+      );
+    }
+  }
+
+  return lines.join('\n');
 }
 
 export function sectionText(section: Section) {
@@ -95,11 +148,18 @@ export type BuildArgs = {
 
 export function buildPrompt({ kind, book, section, previous = [], settings }: BuildArgs): string {
   const flavour = settings.promptFlavour.trim() ? `\n\nExtra instruction from me: ${settings.promptFlavour.trim()}` : '';
-  const text = section ? clip(sectionText(section)) : '';
-  const priorSummaries = previous
-    .filter((s) => s.summary || s.recap)
-    .map((s) => `- ${sectionLabel(s)}: ${(s.summary || s.recap).replace(/\s+/g, ' ').slice(0, 700)}`)
-    .join('\n');
+  const clipped = section ? clipToTail(section) : { text: '', truncated: false, dropped: 0 };
+  const text = clipped.text;
+  // Recap/story-so-far draw on earlier chapters' saved summaries — but most chapters
+  // won't have one until you actually run "Summarise this chapter" and apply it. Until
+  // then, fall back to the raw page text so recap isn't empty just because you haven't
+  // done that step, and say plainly that it's unedited text rather than a summary.
+  const priorSummaries = buildPriorContext(previous, section);
+  const truncationNote = clipped.truncated
+    ? clipped.dropped > 0
+      ? `\nNote: this chapter is long, so the earliest ${clipped.dropped} page(s) are left out below — you already have those from earlier in this chat. Pick up the summary using that earlier context plus what follows.`
+      : `\nNote: this single page ran long, so the start of it is left out below — you already have it from earlier in this chat.`
+    : '';
 
   switch (kind) {
     case 'transcribe':
@@ -123,6 +183,7 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         '"""',
         text || '(no text captured yet — say so in the summary field)',
         '"""',
+        truncationNote,
         '',
         'Analyse it for my reading journal.',
         JSON_RULES,
@@ -164,6 +225,7 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         '"""',
         text || (section?.summary ?? ''),
         '"""',
+        truncationNote,
         '',
         'Make 8-12 recall cards that would help me remember this chapter in a month. Mix plot, characters, and any facts or vocabulary worth keeping. Questions must be answerable from the text alone.',
         JSON_RULES,
@@ -180,6 +242,7 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         '"""',
         text || (section?.summary ?? ''),
         '"""',
+        truncationNote,
         '',
         'Take me deeper into this chapter: what is really going on under the surface, the craft choices, the symbols, and questions worth sitting with. Speak plainly, no jargon.',
         JSON_RULES,

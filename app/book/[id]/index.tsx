@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Chip, Divider, Label, Progress, Row, SectionHeading, Title } from '../../../src/components/ui';
+import { notify } from '../../../src/lib/alert';
 import { bookProgress, sectionLabel, sectionsOf, useLibrary } from '../../../src/store';
 import { radius, useTheme } from '../../../src/theme';
 import type { BookStatus, Section } from '../../../src/types';
@@ -42,7 +43,7 @@ export default function BookScreen() {
   const readSections = sections.filter((s) => s.status === 'read');
 
   const confirmDelete = () =>
-    Alert.alert('Delete this book?', 'Its chapters, scans and summaries go with it. This cannot be undone.', [
+    notify('Delete this book?', 'Its chapters, scans and summaries go with it. This cannot be undone.', [
       { text: 'Keep it', style: 'cancel' },
       {
         text: 'Delete',

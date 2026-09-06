@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Chip, Field, Label, Row, SectionHeading } from '../../src/components/ui';
+import { notify } from '../../src/lib/alert';
 import { exportBackup, readTextFile } from '../../src/lib/files';
 import { isOcrAvailable } from '../../src/lib/ocr';
 import { useLibrary } from '../../src/store';
@@ -28,7 +29,7 @@ export default function Settings() {
       );
       await exportBackup(json);
     } catch (e: any) {
-      Alert.alert('Export failed', e?.message ?? 'Unknown error');
+      notify('Export failed', e?.message ?? 'Unknown error');
     }
   };
 
@@ -36,10 +37,10 @@ export default function Settings() {
     try {
       const res = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
       if (res.canceled || !res.assets?.[0]) return;
-      const text = await readTextFile(res.assets[0].uri);
+      const text = await readTextFile(res.assets[0]);
       const data = JSON.parse(text);
       if (!Array.isArray(data.books)) throw new Error('That file is not a Book Friend backup.');
-      Alert.alert(
+      notify(
         'Replace everything?',
         `The backup holds ${data.books.length} books. Your current library is replaced.`,
         [
@@ -48,12 +49,12 @@ export default function Settings() {
         ]
       );
     } catch (e: any) {
-      Alert.alert('Import failed', e?.message ?? 'Unknown error');
+      notify('Import failed', e?.message ?? 'Unknown error');
     }
   };
 
   const confirmWipe = () =>
-    Alert.alert('Erase everything?', 'Every book, scan and summary on this phone. There is no undo.', [
+    notify('Erase everything?', 'Every book, scan and summary on this phone. There is no undo.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Erase', style: 'destructive', onPress: wipe },
     ]);

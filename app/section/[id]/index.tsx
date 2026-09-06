@@ -2,12 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { ReadingTimer } from '../../../src/components/ReadingTimer';
 import { Body, Button, Card, Chip, Field, Label, Row, SectionHeading, Title } from '../../../src/components/ui';
+import { notify } from '../../../src/lib/alert';
 import { goBack } from '../../../src/lib/nav';
 import { wordCount } from '../../../src/lib/ocr';
 import { sectionText } from '../../../src/lib/prompts';
+import { timeAgo } from '../../../src/lib/time';
 import { sectionLabel, sectionsOf, useLibrary } from '../../../src/store';
 import { radius, useTheme } from '../../../src/theme';
 import type { SectionKind } from '../../../src/types';
@@ -44,7 +46,7 @@ export default function SectionScreen() {
     router.push({ pathname: '/ai', params: { kind, bookId: section.bookId, sectionId: section.id } });
 
   const confirmDelete = () =>
-    Alert.alert('Delete this chapter?', 'Its scans and summary go with it.', [
+    notify('Delete this chapter?', 'Its scans and summary go with it.', [
       { text: 'Keep it', style: 'cancel' },
       {
         text: 'Delete',
@@ -227,7 +229,7 @@ export default function SectionScreen() {
         </Row>
         {section.aiUpdatedAt ? (
           <Body muted style={{ fontSize: 12, marginTop: 8 }}>
-            Last updated from an AI answer on {new Date(section.aiUpdatedAt).toLocaleDateString()}
+            Last updated from an AI answer {timeAgo(section.aiUpdatedAt)}
           </Body>
         ) : null}
 
