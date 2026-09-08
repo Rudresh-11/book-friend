@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Chip, Divider, Label, Progress, Row, SectionHeading, Title } from '../../../src/components/ui';
 import { notify } from '../../../src/lib/alert';
-import { bookProgress, sectionLabel, sectionsOf, useLibrary } from '../../../src/store';
+import { bookProgress, sectionLabel, sectionPageProgress, sectionsOf, useLibrary } from '../../../src/store';
 import { radius, useTheme } from '../../../src/theme';
 import type { BookStatus, Section } from '../../../src/types';
 
@@ -138,8 +138,32 @@ export default function BookScreen() {
           {book.storySoFar ? (
             <>
               <Label>Story so far</Label>
-              <Body style={{ marginTop: 6 }}>{book.storySoFar}</Body>
-              <Divider />
+              <Body style={{ marginTop: 6 }} selectable>{book.storySoFar}</Body>
+              {book.openThreads.length ? (
+                <View style={{ marginTop: 14, gap: 8 }}>
+                  <Label>Still hanging</Label>
+                  {book.openThreads.map((thread, i) => (
+                    <Row key={i} gap={10} style={{ alignItems: 'flex-start' }}>
+                      <Ionicons name="ellipse" size={7} color={t.accent} style={{ marginTop: 7 }} />
+                      <Body style={{ flex: 1, fontSize: 14 }} selectable>{thread}</Body>
+                    </Row>
+                  ))}
+                </View>
+              ) : null}
+              {book.keyPeople.length ? (
+                <View style={{ marginTop: 14, gap: 8 }}>
+                  <Label>Who matters right now</Label>
+                  {book.keyPeople.map((person, i) => (
+                    <View key={i}>
+                      <Body style={{ fontWeight: '700', fontSize: 14 }}>{person.name}</Body>
+                      {person.note ? <Body muted style={{ fontSize: 13 }}>{person.note}</Body> : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              <View style={{ marginTop: 14 }}>
+                <Divider />
+              </View>
             </>
           ) : (
             <Body muted style={{ marginBottom: 12 }}>
@@ -225,6 +249,7 @@ function SectionRow({ section }: { section: Section }) {
   const done = section.status === 'read';
   const scans = section.pages.length;
   const hasText = section.pages.some((p) => p.text.trim());
+  const pages = sectionPageProgress(section);
 
   return (
     <Card onPress={() => router.push(`/section/${section.id}`)} style={{ padding: 12 }}>
@@ -244,9 +269,26 @@ function SectionRow({ section }: { section: Section }) {
           />
         </Pressable>
         <View style={{ flex: 1, gap: 3 }}>
-          <Body style={{ fontWeight: '600', opacity: done ? 0.65 : 1 }} numberOfLines={1}>
-            {sectionLabel(section)}
-          </Body>
+          <Row gap={8} style={{ justifyContent: 'space-between' }}>
+            <Body style={{ flex: 1, fontWeight: '600', opacity: done ? 0.65 : 1 }} numberOfLines={1}>
+              {sectionLabel(section)}
+            </Body>
+            {pages.hasRange ? (
+              <Body muted style={{ fontSize: 12 }}>
+                p. {pages.start}–{pages.end}
+              </Body>
+            ) : null}
+          </Row>
+          {pages.hasRange && !done ? (
+            <View style={{ gap: 3, marginTop: 2, marginBottom: 2 }}>
+              <Progress ratio={pages.ratio} height={4} />
+              {pages.furthest !== undefined ? (
+                <Body muted style={{ fontSize: 11 }}>
+                  on p. {pages.furthest} · {pages.reached}/{pages.total}
+                </Body>
+              ) : null}
+            </View>
+          ) : null}
           <Row gap={10}>
             {scans ? (
               <Row gap={3}>
@@ -256,10 +298,12 @@ function SectionRow({ section }: { section: Section }) {
             ) : null}
             {hasText ? <Ionicons name="text-outline" size={12} color={t.faint} /> : null}
             {section.summary ? <Ionicons name="sparkles-outline" size={12} color={t.accent} /> : null}
-            {section.cards.length ? (
+            {section.comic.length ? (
               <Row gap={3}>
-                <Ionicons name="albums-outline" size={12} color={t.faint} />
-                <Body muted style={{ fontSize: 12 }}>{section.cards.length}</Body>
+                <Ionicons name="color-palette-outline" size={12} color={t.faint} />
+                <Body muted style={{ fontSize: 12 }}>
+                  {section.comic.filter((p) => p.uri).length}/{section.comic.length}
+                </Body>
               </Row>
             ) : null}
             {!scans && !section.summary ? <Body muted style={{ fontSize: 12 }}>empty</Body> : null}

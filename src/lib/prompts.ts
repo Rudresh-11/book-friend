@@ -1,7 +1,7 @@
 import type { Book, Section, Settings } from '../types';
 import { sectionLabel } from '../store';
 
-export type PromptKind = 'transcribe' | 'section' | 'recap' | 'cards' | 'discuss' | 'outline' | 'storySoFar';
+export type PromptKind = 'transcribe' | 'section' | 'recap' | 'comic' | 'discuss' | 'outline' | 'storySoFar';
 
 export type PromptDef = {
   kind: PromptKind;
@@ -33,10 +33,10 @@ export const PROMPTS: PromptDef[] = [
     icon: '⏪',
   },
   {
-    kind: 'cards',
-    title: 'Make review cards',
-    blurb: 'Question/answer cards that land in the Review tab with spaced repetition.',
-    icon: '🎴',
+    kind: 'comic',
+    title: 'Draw it as a comic',
+    blurb: 'Breaks the chapter into scenes and writes an image prompt for each one, ready for an image AI.',
+    icon: '🎨',
   },
   {
     kind: 'discuss',
@@ -198,8 +198,7 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
  "quotes":[{"text":"a striking line, copied exactly","page":"12"}],
  "vocabulary":[{"word":"unusual word from the text","meaning":"plain meaning"}],
  "mood":"one or two words",
- "difficulty":3,
- "cards":[{"q":"recall question","a":"answer"}]}`,
+ "difficulty":3}`,
         flavour,
       ].join('\n');
 
@@ -217,7 +216,7 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         flavour,
       ].join('\n');
 
-    case 'cards':
+    case 'comic':
       return [
         header(book, section, settings),
         '',
@@ -227,10 +226,11 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         '"""',
         truncationNote,
         '',
-        'Make 8-12 recall cards that would help me remember this chapter in a month. Mix plot, characters, and any facts or vocabulary worth keeping. Questions must be answerable from the text alone.',
+        'Turn this chapter into a comic. Break it into the scenes that actually matter — 4 to 10 of them, in the order they happen. For each scene give me two things: a short caption in my own reading-journal voice saying what happens, and an image prompt I can paste straight into an image generator.',
+        'The image prompt must stand on its own: name the characters and describe how they look, what they are wearing, where they are, the time of day, what they are doing at that moment, the camera angle, and the mood. Keep the same art style wording in every prompt so the panels look like one comic — say "comic book panel, bold ink outlines, flat colour" or similar in each one, and keep each character described the same way every time they appear. Only draw what the text actually shows.',
         JSON_RULES,
         'Shape:',
-        '{"kind":"cards","cards":[{"q":"question","a":"short answer"}]}',
+        '{"kind":"comic","panels":[{"scene":"what happens here, one or two lines","prompt":"the full image prompt for this panel"}]}',
         flavour,
       ].join('\n');
 
@@ -247,7 +247,7 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         'Take me deeper into this chapter: what is really going on under the surface, the craft choices, the symbols, and questions worth sitting with. Speak plainly, no jargon.',
         JSON_RULES,
         'Shape:',
-        '{"kind":"discuss","notes":"the deeper reading, a few paragraphs","themes":["theme labels"],"cards":[{"q":"discussion question","a":"a way into it"}]}',
+        '{"kind":"discuss","notes":"the deeper reading, a few paragraphs — end it with a few questions worth sitting with","themes":["theme labels"]}',
         flavour,
       ].join('\n');
 

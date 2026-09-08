@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -7,6 +6,7 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Field, Label, Row, Title } from '../../../src/components/ui';
 import { notify } from '../../../src/lib/alert';
+import { copyText } from '../../../src/lib/clipboard';
 import { deletePhoto, persistPhoto } from '../../../src/lib/files';
 import { isOcrAvailable, recognizeText, wordCount } from '../../../src/lib/ocr';
 import { sectionLabel, uid, useLibrary } from '../../../src/store';
@@ -286,7 +286,7 @@ export default function ScanScreen() {
                     variant="ghost"
                     icon="copy-outline"
                     label="Copy"
-                    onPress={() => Clipboard.setStringAsync(page.text)}
+                    onPress={() => copyText(page.text)}
                   />
                   <Body muted style={{ fontSize: 12, marginLeft: 'auto' }}>
                     {wordCount(page.text)} words · {page.textSource}

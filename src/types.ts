@@ -19,16 +19,30 @@ export type PageShot = {
 export type Quote = { text: string; page?: string; note?: string };
 export type Person = { name: string; note: string };
 export type Term = { word: string; meaning: string };
-export type Card = {
+
+/**
+ * A whole comic page in one picture — what an image AI hands back when you give
+ * it every panel prompt at once, with all the scenes laid out in a grid.
+ */
+export type ComicSheet = {
   id: string;
-  q: string;
-  a: string;
-  /** spaced repetition state */
-  ease: number;
-  interval: number;
-  dueAt: number;
-  reps: number;
-  lapses: number;
+  uri: string;
+  /** the picture's own proportions, so it can be shown without squashing */
+  width?: number;
+  height?: number;
+  createdAt: number;
+};
+
+/** One comic panel for a scene in a chapter. */
+export type ComicPanel = {
+  id: string;
+  /** what happens in this scene, in a line or two — the caption under the picture */
+  scene: string;
+  /** the image prompt to paste into an image AI */
+  prompt: string;
+  /** the drawing itself, once you have made one and saved it back here */
+  uri?: string;
+  createdAt: number;
 };
 
 export type Section = {
@@ -51,7 +65,10 @@ export type Section = {
   characters: Person[];
   quotes: Quote[];
   vocabulary: Term[];
-  cards: Card[];
+  /** the chapter drawn out scene by scene */
+  comic: ComicPanel[];
+  /** whole-page versions of the comic, one picture holding every panel */
+  comicSheets: ComicSheet[];
   myNotes: string;
   mood: string;
   difficulty: number;
@@ -73,6 +90,10 @@ export type Book = {
   rating: number;
   /** cumulative "story so far" across everything read */
   storySoFar: string;
+  /** loose ends the story has not tied off yet, from "story so far" and book-level recaps */
+  openThreads: string[];
+  /** who matters right now, from the same answers */
+  keyPeople: Person[];
   myNotes: string;
   createdAt: number;
   startedAt?: number;

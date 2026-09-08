@@ -4,7 +4,8 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   Book,
   BookStatus,
-  Card,
+  ComicPanel,
+  ComicSheet,
   LibraryState,
   PageShot,
   ReadingSession,
@@ -41,7 +42,8 @@ export function emptySection(bookId: string, order: number, kind: SectionKind): 
     characters: [],
     quotes: [],
     vocabulary: [],
-    cards: [],
+    comic: [],
+    comicSheets: [],
     myNotes: '',
     mood: '',
     difficulty: 0,
@@ -66,8 +68,11 @@ type Actions = {
   updatePage: (sectionId: string, pageId: string, patch: Partial<PageShot>) => void;
   removePage: (sectionId: string, pageId: string) => void;
 
-  addCards: (sectionId: string, cards: { q: string; a: string }[]) => void;
-  gradeCard: (sectionId: string, cardId: string, grade: 0 | 1 | 2) => void;
+  addPanels: (sectionId: string, panels: { scene: string; prompt: string }[]) => void;
+  updatePanel: (sectionId: string, panelId: string, patch: Partial<ComicPanel>) => void;
+  removePanel: (sectionId: string, panelId: string) => void;
+  addComicSheet: (sectionId: string, sheet: Omit<ComicSheet, 'id' | 'createdAt'>) => void;
+  removeComicSheet: (sectionId: string, sheetId: string) => void;
 
   addSession: (s: Omit<ReadingSession, 'id'>) => void;
   removeSession: (id: string) => void;
@@ -101,6 +106,8 @@ export const useLibrary = create<Store>()(
           totalPages: b.totalPages,
           rating: b.rating ?? 0,
           storySoFar: b.storySoFar ?? '',
+          openThreads: b.openThreads ?? [],
+          keyPeople: b.keyPeople ?? [],
           myNotes: b.myNotes ?? '',
           createdAt: Date.now(),
           startedAt: b.status === 'want' ? undefined : Date.now(),
@@ -212,61 +219,54 @@ export const useLibrary = create<Store>()(
           ),
         }),
 
-      addCards: (sectionId, cards) => {
-        const now = Date.now();
-        const made: Card[] = cards
-          .filter((c) => c.q?.trim())
-          .map((c) => ({
+      addPanels: (sectionId, panels) => {
+        const made: ComicPanel[] = panels
+          .filter((p) => p.scene?.trim() || p.prompt?.trim())
+          .map((p) => ({
             id: uid(),
-            q: c.q.trim(),
-            a: (c.a ?? '').trim(),
-            ease: 2.5,
-            interval: 0,
-            dueAt: now,
-            reps: 0,
-            lapses: 0,
+            scene: (p.scene ?? '').trim(),
+            prompt: (p.prompt ?? '').trim(),
+            createdAt: Date.now(),
           }));
         if (!made.length) return;
         set({
           sections: get().sections.map((s) =>
-            s.id === sectionId ? { ...s, cards: [...s.cards, ...made] } : s
+            s.id === sectionId ? { ...s, comic: [...s.comic, ...made] } : s
           ),
         });
       },
 
-      gradeCard: (sectionId, cardId, grade) => {
-        const DAY = 86400000;
+      updatePanel: (sectionId, panelId, patch) =>
         set({
-          sections: get().sections.map((s) => {
-            if (s.id !== sectionId) return s;
-            return {
-              ...s,
-              cards: s.cards.map((c) => {
-                if (c.id !== cardId) return c;
-                if (grade === 0) {
-                  return {
-                    ...c,
-                    ease: Math.max(1.3, c.ease - 0.2),
-                    interval: 0,
-                    reps: c.reps + 1,
-                    lapses: c.lapses + 1,
-                    dueAt: Date.now() + 10 * 60 * 1000,
-                  };
-                }
-                const ease = grade === 2 ? Math.min(3.2, c.ease + 0.1) : Math.max(1.3, c.ease - 0.05);
-                const interval = c.interval === 0 ? 1 : c.interval === 1 ? 3 : Math.round(c.interval * ease);
-                return {
-                  ...c,
-                  ease,
-                  interval,
-                  reps: c.reps + 1,
-                  dueAt: Date.now() + interval * DAY,
-                };
-              }),
-            };
-          }),
-        });
-      },
+          sections: get().sections.map((s) =>
+            s.id === sectionId
+              ? { ...s, comic: s.comic.map((p) => (p.id === panelId ? { ...p, ...patch } : p)) }
+              : s
+          ),
+        }),
+
+      removePanel: (sectionId, panelId) =>
+        set({
+          sections: get().sections.map((s) =>
+            s.id === sectionId ? { ...s, comic: s.comic.filter((p) => p.id !== panelId) } : s
+          ),
+        }),
+
+      addComicSheet: (sectionId, sheet) =>
+        set({
+          sections: get().sections.map((s) =>
+            s.id === sectionId
+              ? { ...s, comicSheets: [...s.comicSheets, { ...sheet, id: uid(), createdAt: Date.now() }] }
+              : s
+          ),
+        }),
+
+      removeComicSheet: (sectionId, sheetId) =>
+        set({
+          sections: get().sections.map((s) =>
+            s.id === sectionId ? { ...s, comicSheets: s.comicSheets.filter((x) => x.id !== sheetId) } : s
+          ),
+        }),
 
       addSession: (s) => set({ sessions: [{ ...s, id: uid() }, ...get().sessions] }),
       removeSession: (id) => set({ sessions: get().sessions.filter((s) => s.id !== id) }),
@@ -275,8 +275,8 @@ export const useLibrary = create<Store>()(
 
       replaceAll: (data) =>
         set({
-          books: data.books ?? [],
-          sections: data.sections ?? [],
+          books: (data.books ?? []).map(fillBook),
+          sections: (data.sections ?? []).map(fillSection),
           sessions: data.sessions ?? [],
           settings: { ...DEFAULT_SETTINGS, ...(data.settings ?? {}) },
         }),
@@ -286,10 +286,68 @@ export const useLibrary = create<Store>()(
     {
       name: 'book-friend-v1',
       storage: createJSONStorage(() => AsyncStorage),
-      version: 1,
+      version: 2,
+      // v1 had review cards and no comic panels.
+      migrate: (persisted: any, from) => {
+        if (!persisted || from >= 2) return persisted;
+        return {
+          ...persisted,
+          books: (persisted.books ?? []).map(fillBook),
+          sections: (persisted.sections ?? []).map(fillSection),
+        };
+      },
+      /**
+       * Backfill on EVERY load, not just on a version bump. A saved library is
+       * only ever as new as the app that wrote it, so any list added since then
+       * is missing — and reading `.length` off it crashes the screen. Migrating
+       * on version alone missed exactly that: comic sheets were added after the
+       * bump to 2, so libraries already at 2 never got the field.
+       */
+      merge: (persisted: any, current) => ({
+        ...current,
+        ...(persisted ?? {}),
+        books: ((persisted?.books ?? []) as any[]).map(fillBook),
+        sections: ((persisted?.sections ?? []) as any[]).map(fillSection),
+        sessions: persisted?.sessions ?? [],
+        settings: { ...DEFAULT_SETTINGS, ...(persisted?.settings ?? {}) },
+      }),
     }
   )
 );
+
+/** Backfill anything a library saved by an older version of the app is missing. */
+function fillBook(b: any): Book {
+  return {
+    ...b,
+    tags: b?.tags ?? [],
+    blurb: b?.blurb ?? '',
+    storySoFar: b?.storySoFar ?? '',
+    openThreads: b?.openThreads ?? [],
+    keyPeople: b?.keyPeople ?? [],
+    myNotes: b?.myNotes ?? '',
+    rating: b?.rating ?? 0,
+  };
+}
+
+function fillSection(s: any): Section {
+  const { cards, ...rest } = s ?? {};
+  return {
+    ...rest,
+    pages: (rest.pages ?? []).map((p: any) => ({ ...p, label: p?.label ?? '', text: p?.text ?? '' })),
+    recap: rest.recap ?? '',
+    summary: rest.summary ?? '',
+    keyPoints: rest.keyPoints ?? [],
+    themes: rest.themes ?? [],
+    characters: rest.characters ?? [],
+    quotes: rest.quotes ?? [],
+    vocabulary: rest.vocabulary ?? [],
+    comic: rest.comic ?? [],
+    comicSheets: rest.comicSheets ?? [],
+    myNotes: rest.myNotes ?? '',
+    mood: rest.mood ?? '',
+    difficulty: rest.difficulty ?? 0,
+  };
+}
 
 /* ---------- selectors / derived helpers ---------- */
 
@@ -307,11 +365,23 @@ export function sectionLabel(s: Section) {
   return s.title ? `${head} — ${s.title}` : head;
 }
 
-export function dueCards(state: LibraryState) {
-  const now = Date.now();
-  return state.sections.flatMap((s) =>
-    s.cards.filter((c) => c.dueAt <= now).map((c) => ({ card: c, section: s }))
-  );
+/**
+ * How far through a chapter you are, from its first/last page numbers and the
+ * page numbers on the scans you have added. A label like "12-13" counts as
+ * having reached p. 13.
+ */
+export function sectionPageProgress(s: Section) {
+  const start = parseInt(s.startPage ?? '', 10);
+  const end = parseInt(s.endPage ?? '', 10);
+  const seen = s.pages.flatMap((p) => (p.label.match(/\d+/g) ?? []).map(Number)).filter(Number.isFinite);
+  const furthest = seen.length ? Math.max(...seen) : undefined;
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    return { hasRange: false as const, furthest, total: 0, reached: 0, ratio: 0 };
+  }
+  const total = end - start + 1;
+  const reached = furthest === undefined ? 0 : Math.max(0, Math.min(total, furthest - start + 1));
+  return { hasRange: true as const, start, end, furthest, total, reached, ratio: total ? reached / total : 0 };
 }
 
 export function streakDays(sessions: ReadingSession[]) {

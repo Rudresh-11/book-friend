@@ -19,7 +19,7 @@ export type AiPayload = {
   characters?: { name: string; note?: string }[];
   quotes?: { text: string; page?: string; note?: string }[];
   vocabulary?: { word: string; meaning?: string }[];
-  cards?: { q: string; a?: string }[];
+  panels?: { scene: string; prompt: string }[];
   pages?: { label?: string; text: string }[];
   sections?: { kind?: string; number?: string; title?: string }[];
 };
@@ -90,7 +90,7 @@ export function parseAiResponse(kind: PromptKind, raw: string): ParseResult {
     transcribe: 'notes',
     section: 'summary',
     recap: 'recap',
-    cards: 'notes',
+    comic: 'notes',
     discuss: 'notes',
     outline: 'blurb',
     storySoFar: 'storySoFar',
@@ -145,12 +145,19 @@ function normalise(raw: any): AiPayload {
         .filter((v: any) => v.word)
     : [];
 
-  out.cards = Array.isArray(raw.cards ?? raw.questions)
-    ? (raw.cards ?? raw.questions)
-        .map((c: any) =>
-          typeof c === 'string' ? { q: c, a: '' } : { q: str(c?.q ?? c?.question), a: str(c?.a ?? c?.answer) }
+  out.panels = Array.isArray(raw.panels ?? raw.scenes ?? raw.comic)
+    ? (raw.panels ?? raw.scenes ?? raw.comic)
+        .map((p: any) =>
+          typeof p === 'string'
+            ? { scene: p, prompt: p }
+            : {
+                scene: str(p?.scene ?? p?.caption ?? p?.description ?? p?.text),
+                prompt: str(p?.prompt ?? p?.imagePrompt ?? p?.image_prompt ?? p?.image),
+              }
         )
-        .filter((c: any) => c.q)
+        // a panel with only one of the two is still worth keeping — fall back to the other
+        .map((p: any) => ({ scene: p.scene || p.prompt, prompt: p.prompt || p.scene }))
+        .filter((p: any) => p.scene || p.prompt)
     : [];
 
   out.pages = Array.isArray(raw.pages)
@@ -189,7 +196,7 @@ export function describeChanges(d: AiPayload): string[] {
   push(d.characters?.length, 'character');
   push(d.quotes?.length, 'quote');
   push(d.vocabulary?.length, 'vocabulary word');
-  push(d.cards?.length, 'review card');
+  push(d.panels?.length, 'comic panel');
   push(d.pages?.length, 'transcribed page');
   push(d.sections?.length, 'chapter');
   return out;

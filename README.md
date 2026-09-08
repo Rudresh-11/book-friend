@@ -1,7 +1,7 @@
 # Book Friend
 
 A private reading journal for one person — yours. Every book, page photo, summary and
-review card lives on your phone. There is no server, no account and no database:
+comic panel lives on your phone. There is no server, no account and no database:
 the whole library is a JSON blob in local storage, and page photos are files in the
 app's own folder.
 
@@ -25,18 +25,18 @@ text by hand, and the corrected text is what the AI prompts are built from.
 **The AI bridge — copy a prompt out, paste an answer back.** The app never calls an
 AI service. It writes a careful prompt, you copy it into whichever AI app you like,
 and you paste the reply back. The reply is parsed and fanned out across the UI:
-summary, recap, key points, themes, who's-who, quotes, vocabulary and review cards
+summary, recap, key points, themes, who's-who, quotes, vocabulary and comic panels
 all appear in their own places. Seven prompts ship with it:
 
 | Prompt | What comes back |
 | --- | --- |
 | Transcribe page photos | Text for each scan (when on-device OCR isn't available) |
-| Summarise this chapter | The full chapter screen — summary, recap, key points, characters, quotes, words, cards |
+| Summarise this chapter | The full chapter screen — summary, recap, key points, characters, quotes, words |
 | Recap before I continue | A "previously on…" refresher built from everything read so far |
-| Make review cards | Q/A cards that enter spaced repetition |
+| Draw it as a comic | The chapter split into scenes, each with an image prompt |
 | Go deeper | Themes, symbolism, discussion questions |
 | Outline the book | Blurb, genre, tags and the whole chapter list — creates the chapters for you |
-| Story so far | One running summary of the book up to where you are |
+| Story so far | One running summary of the book, plus the threads still hanging |
 
 After you apply a reply you get a receipt: one small card per thing that was saved,
 saying where in the app it landed — long text collapses behind "Show more", long
@@ -49,8 +49,19 @@ if the AI ignored the format entirely it still saves the plain text rather than
 losing your round trip. Nothing is overwritten blindly — characters, quotes and
 vocabulary merge with what's already there.
 
-**Remember it.** Cards come back on an SM-2-style schedule (Again / Good / Easy) in
-the Review tab.
+**Draw the chapter as a comic.** Ask for a comic and the chapter comes back broken
+into its scenes — a caption for each one and a full image prompt to go with it,
+written so every panel keeps the same art style and the same faces. Two ways to draw it. Copy the
+whole-page brief and the image AI returns **one comic page** with every scene laid
+out in a grid — save that single picture and it becomes the chapter's comic page.
+Or copy one panel's prompt at a time and drop each picture onto its own panel;
+"fill empty panels" takes a batch at once and lays them out in order. Panels can
+also be written by hand.
+
+**Know where you are.** Give a chapter its first and last page and the chapter
+screen draws a progress bar from the page numbers on your scans — "you are on
+p. 21 · 10 of 19 · 9 to go" — and the chapter list on the book screen shows the
+same thing in miniature.
 
 **Reading sessions.** A timer on every chapter, a daily goal, a streak, a two-week
 bar chart and a session log in the Progress tab.
@@ -84,13 +95,13 @@ with the photos attached in the other app.
 
 ```
 app/                       expo-router screens
-  (tabs)/                  Library · Review · Progress · Settings
+  (tabs)/                  Library · Progress · Settings
   book/new, book/[id]/     add, view and edit a book
-  section/[id]/            a chapter, and its page-scan screen
+  section/[id]/            a chapter, its page scans and its comic
   ai.tsx                   the copy-prompt / paste-answer bridge
 src/
   store.ts                 zustand + AsyncStorage, the whole data model
-  types.ts                 Book, Section, PageShot, Card, ReadingSession
+  types.ts                 Book, Section, PageShot, ComicPanel, ReadingSession
   theme.ts                 warm paper palette, light and dark
   lib/prompts.ts           prompt text and the JSON contract for each kind
   lib/parse.ts             forgiving parser for whatever the AI replied

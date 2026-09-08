@@ -4,13 +4,13 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { ReadingTimer } from '../../../src/components/ReadingTimer';
-import { Body, Button, Card, Chip, Field, Label, Row, SectionHeading, Title } from '../../../src/components/ui';
+import { Body, Button, Card, Chip, Field, Label, Progress, Row, SectionHeading, Title } from '../../../src/components/ui';
 import { notify } from '../../../src/lib/alert';
 import { goBack } from '../../../src/lib/nav';
 import { wordCount } from '../../../src/lib/ocr';
 import { sectionText } from '../../../src/lib/prompts';
 import { timeAgo } from '../../../src/lib/time';
-import { sectionLabel, sectionsOf, useLibrary } from '../../../src/store';
+import { sectionLabel, sectionPageProgress, sectionsOf, useLibrary } from '../../../src/store';
 import { radius, useTheme } from '../../../src/theme';
 import type { SectionKind } from '../../../src/types';
 
@@ -40,6 +40,7 @@ export default function SectionScreen() {
   const next = siblings[index + 1];
   const text = sectionText(section);
   const words = wordCount(text);
+  const pages = sectionPageProgress(section);
   const done = section.status === 'read';
 
   const goAi = (kind: string) =>
@@ -141,6 +142,30 @@ export default function SectionScreen() {
           />
         </Row>
 
+        {/* --- where you are in the chapter --- */}
+        {pages.hasRange ? (
+          <Card style={{ marginTop: 14, gap: 8 }}>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Label>Pages {pages.start}–{pages.end}</Label>
+              <Body muted style={{ fontSize: 12 }}>
+                {pages.total} {pages.total === 1 ? 'page' : 'pages'}
+              </Body>
+            </Row>
+            <Progress ratio={pages.ratio} height={8} />
+            <Body muted style={{ fontSize: 12 }}>
+              {pages.furthest === undefined
+                ? 'No page numbers on your scans yet — label a scan to track where you are.'
+                : pages.reached >= pages.total
+                  ? `You reached p. ${pages.furthest} — the end of this chapter.`
+                  : `You are on p. ${pages.furthest} · ${pages.reached} of ${pages.total} · ${pages.total - pages.reached} to go`}
+            </Body>
+          </Card>
+        ) : pages.furthest !== undefined ? (
+          <Body muted style={{ fontSize: 12, marginTop: 12 }}>
+            Furthest page scanned: p. {pages.furthest}. Add the first and last page in edit mode to see a progress bar.
+          </Body>
+        ) : null}
+
         <View style={{ marginTop: 12 }}>
           <ReadingTimer bookId={section.bookId} sectionId={section.id} />
         </View>
@@ -223,7 +248,7 @@ export default function SectionScreen() {
         <SectionHeading>Ask another AI</SectionHeading>
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
           <Button small icon="sparkles-outline" label="Summarise" onPress={() => goAi('section')} />
-          <Button small variant="soft" icon="albums-outline" label="Review cards" onPress={() => goAi('cards')} />
+          <Button small variant="soft" icon="color-palette-outline" label="Comic" onPress={() => goAi('comic')} />
           <Button small variant="soft" icon="search-outline" label="Go deeper" onPress={() => goAi('discuss')} />
           <Button small variant="soft" icon="play-back-outline" label="Recap" onPress={() => goAi('recap')} />
         </Row>
@@ -232,6 +257,96 @@ export default function SectionScreen() {
             Last updated from an AI answer {timeAgo(section.aiUpdatedAt)}
           </Body>
         ) : null}
+
+        {/* --- comic --- */}
+        <SectionHeading
+          right={
+            section.comic.length ? (
+              <Pressable onPress={() => router.push(`/section/${section.id}/comic`)} hitSlop={6}>
+                <Body style={{ color: t.accent, fontSize: 13, fontWeight: '700' }}>Open</Body>
+              </Pressable>
+            ) : undefined
+          }>
+          Comic {section.comic.length ? `(${section.comic.length})` : ''}
+        </SectionHeading>
+
+        {section.comic.length === 0 ? (
+          <Card onPress={() => goAi('comic')}>
+            <Row gap={12}>
+              <Ionicons name="color-palette-outline" size={26} color={t.accent} />
+              <View style={{ flex: 1 }}>
+                <Body style={{ fontWeight: '600' }}>Draw this chapter as a comic</Body>
+                <Body muted style={{ fontSize: 13 }}>
+                  Ask an AI to break it into scenes, then make a picture for each one.
+                </Body>
+              </View>
+            </Row>
+          </Card>
+        ) : (
+          <>
+            {section.comicSheets.length ? (
+              // a preview, not the reading view — tapping opens the comic full size
+              <Pressable
+                onPress={() => router.push(`/section/${section.id}/comic`)}
+                style={{ marginBottom: 10, width: '100%', maxWidth: 420 }}>
+                <Image
+                  source={{ uri: section.comicSheets[0].uri }}
+                  style={{
+                    width: '100%',
+                    aspectRatio:
+                      section.comicSheets[0].width && section.comicSheets[0].height
+                        ? section.comicSheets[0].width / section.comicSheets[0].height
+                        : 3 / 2,
+                    borderRadius: radius.sm,
+                    backgroundColor: t.cardAlt,
+                  }}
+                  contentFit="contain"
+                />
+              </Pressable>
+            ) : null}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              {section.comic.map((panel, i) => (
+                <Pressable key={panel.id} onPress={() => router.push(`/section/${section.id}/comic`)}>
+                  {panel.uri ? (
+                    <Image
+                      source={{ uri: panel.uri }}
+                      style={{ width: 132, height: 132, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 132,
+                        height: 132,
+                        borderRadius: radius.sm,
+                        backgroundColor: t.cardAlt,
+                        borderWidth: 1,
+                        borderColor: t.border,
+                        borderStyle: 'dashed',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: 10,
+                        gap: 6,
+                      }}>
+                      <Ionicons name="image-outline" size={22} color={t.faint} />
+                      <Body muted style={{ fontSize: 11, textAlign: 'center' }} numberOfLines={3}>
+                        {panel.scene}
+                      </Body>
+                    </View>
+                  )}
+                  <Body muted style={{ fontSize: 11, marginTop: 4 }}>
+                    Panel {i + 1}
+                  </Body>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <Body muted style={{ fontSize: 12, marginTop: 8 }}>
+              {section.comicSheets.length
+                ? `${section.comic.length} scenes on ${section.comicSheets.length === 1 ? 'a whole comic page' : `${section.comicSheets.length} comic pages`}`
+                : `${section.comic.filter((p) => p.uri).length} of ${section.comic.length} panels drawn`}
+            </Body>
+          </>
+        )}
 
         {section.recap ? (
           <>
@@ -285,20 +400,6 @@ export default function SectionScreen() {
           </>
         ) : null}
 
-        {section.quotes.length ? (
-          <>
-            <SectionHeading>Lines worth keeping</SectionHeading>
-            <View style={{ gap: 8 }}>
-              {section.quotes.map((q, i) => (
-                <Card key={i} style={{ borderLeftWidth: 3, borderLeftColor: t.accent }}>
-                  <Body selectable style={{ fontStyle: 'italic' }}>“{q.text}”</Body>
-                  {q.page ? <Body muted style={{ fontSize: 12, marginTop: 6 }}>p. {q.page}</Body> : null}
-                </Card>
-              ))}
-            </View>
-          </>
-        ) : null}
-
         {section.vocabulary.length ? (
           <>
             <SectionHeading>Words</SectionHeading>
@@ -324,19 +425,17 @@ export default function SectionScreen() {
           </>
         ) : null}
 
-        {section.cards.length ? (
+        {section.quotes.length ? (
           <>
-            <SectionHeading>Review cards</SectionHeading>
-            <Card onPress={() => router.push('/review')}>
-              <Row gap={12}>
-                <Ionicons name="albums-outline" size={22} color={t.accent} />
-                <Body style={{ flex: 1 }}>
-                  {section.cards.length} cards from this chapter ·{' '}
-                  {section.cards.filter((c) => c.dueAt <= Date.now()).length} due now
-                </Body>
-                <Ionicons name="chevron-forward" size={18} color={t.faint} />
-              </Row>
-            </Card>
+            <SectionHeading>Lines worth keeping</SectionHeading>
+            <View style={{ gap: 8 }}>
+              {section.quotes.map((q, i) => (
+                <Card key={i} style={{ borderLeftWidth: 3, borderLeftColor: t.accent }}>
+                  <Body selectable style={{ fontStyle: 'italic' }}>“{q.text}”</Body>
+                  {q.page ? <Body muted style={{ fontSize: 12, marginTop: 6 }}>p. {q.page}</Body> : null}
+                </Card>
+              ))}
+            </View>
           </>
         ) : null}
 

@@ -5,6 +5,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Chip, Collapsible, Field, Label, Row, SectionHeading, Title } from '../src/components/ui';
+import { copyText } from '../src/lib/clipboard';
 import { goBack } from '../src/lib/nav';
 import { wordCount } from '../src/lib/ocr';
 import { describeChanges, parseAiResponse } from '../src/lib/parse';
@@ -32,7 +33,7 @@ export default function AiBridge() {
   const previous = section ? siblings.filter((s) => s.order < section.order) : siblings.filter((s) => s.status === 'read');
 
   const def = PROMPTS.find((p) => p.kind === kind)!;
-  const needsSection = kind === 'section' || kind === 'cards' || kind === 'discuss' || kind === 'transcribe';
+  const needsSection = kind === 'section' || kind === 'comic' || kind === 'discuss' || kind === 'transcribe';
 
   const prompt = useMemo(() => {
     if (!book) return '';
@@ -51,7 +52,7 @@ export default function AiBridge() {
   }
 
   const copy = async () => {
-    await Clipboard.setStringAsync(prompt);
+    if (!(await copyText(prompt))) return;
     setCopied(true);
     Haptics.selectionAsync().catch(() => {});
     setTimeout(() => setCopied(false), 2500);
@@ -117,6 +118,32 @@ export default function AiBridge() {
     if (kind === 'recap' && !section && d.recap && !d.storySoFar) {
       bookPatch.storySoFar = d.recap;
       add({ title: 'Recap', where: 'saved as the book’s story so far', body: d.recap });
+    }
+    // "Story so far" and a book-level recap answer with key points (the threads still
+    // hanging) and who matters right now. There is no chapter to hang those on, so
+    // they belong to the book — before this they were parsed and then dropped.
+    if (!section) {
+      if (d.keyPoints?.length) {
+        const merged = merge(book.openThreads, d.keyPoints);
+        bookPatch.openThreads = merged;
+        add({
+          title: 'Open threads',
+          where: 'on the book, under the story so far',
+          items: d.keyPoints,
+          note: countNote(book.openThreads.length, merged.length, d.keyPoints.length),
+        });
+      }
+      if (d.characters?.length) {
+        const incoming = d.characters.map((c) => ({ name: c.name, note: c.note ?? '' }));
+        const merged = mergeBy([...incoming, ...book.keyPeople], (c) => c.name);
+        bookPatch.keyPeople = merged;
+        add({
+          title: 'Who matters right now',
+          where: 'on the book, under the story so far',
+          pairs: incoming.map((c) => ({ k: c.name, v: c.note })),
+          note: countNote(book.keyPeople.length, merged.length, incoming.length),
+        });
+      }
     }
     if (Object.keys(bookPatch).length) store.updateBook(book.id, bookPatch as any);
 
@@ -256,14 +283,17 @@ export default function AiBridge() {
       }
       store.updateSection(section.id, patch as any);
 
-      if (d.cards?.length) {
-        const cards = d.cards.map((c) => ({ q: c.q, a: c.a ?? '' }));
-        store.addCards(section.id, cards);
+      if (d.panels?.length) {
+        const panels = d.panels.map((p) => ({ scene: p.scene, prompt: p.prompt }));
+        store.addPanels(section.id, panels);
         add({
-          title: 'Review cards',
-          where: 'in the Review tab',
-          pairs: cards.map((c) => ({ k: c.q, v: c.a })),
-          note: `all ${cards.length} are due straight away`,
+          title: 'Comic panels',
+          where: 'in this chapter’s comic',
+          items: panels.map((p, i) => `${i + 1}. ${p.scene}`),
+          note:
+            section.comic.length
+              ? `${panels.length} added after the ${section.comic.length} already drawn`
+              : 'open the comic to make the pictures',
         });
       }
     }
@@ -325,7 +355,7 @@ export default function AiBridge() {
 
         <SectionHeading>What do you want?</SectionHeading>
         <Row style={{ flexWrap: 'wrap' }}>
-          {PROMPTS.filter((p) => (section ? true : !['transcribe', 'section', 'cards', 'discuss'].includes(p.kind))).map((p) => (
+          {PROMPTS.filter((p) => (section ? true : !['transcribe', 'section', 'comic', 'discuss'].includes(p.kind))).map((p) => (
             <Chip key={p.kind} label={`${p.icon} ${p.title}`} active={kind === p.kind} onPress={() => setKind(p.kind)} />
           ))}
         </Row>
