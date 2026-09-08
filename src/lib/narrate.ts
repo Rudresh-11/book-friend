@@ -74,8 +74,12 @@ function speakerNear(before: string, after: string, knownNames: string[], spoken
   for (const hay of [sameParagraphAfter, sameParagraphBefore]) {
     const withVerbFirst = hay.match(new RegExp(`\\b(?:${VERBS})\\s+([A-Z][\\w'’-]+)`));
     if (withVerbFirst) return match(withVerbFirst[1], knownNames);
-    const nameFirst = hay.match(new RegExp(`\\b([A-Z][\\w'’-]+)\\s+(?:${VERBS})\\b`));
-    if (nameFirst) return match(nameFirst[1], knownNames);
+    const nameFirst = hay.match(new RegExp(`\\b([A-Z][\\w'’-]+)\\s+(?:${VERBS})\\b(.{0,12})`));
+    // "Neema said nothing at all" is narration about silence, not a speech tag —
+    // taking it would hand the line to whoever just failed to say anything
+    if (nameFirst && !/^\s*(nothing|no more|not|never|neither|little)\b/i.test(nameFirst[2] ?? '')) {
+      return match(nameFirst[1], knownNames);
+    }
   }
 
   // Unattributed. Two conventions carry most prose: a second quote in the same
@@ -129,8 +133,47 @@ function splitLongLines(lines: NarrationLine[], max = 300): NarrationLine[] {
 
 /** The script for a chapter: the AI-cast one if it has been applied, else the plain reading. */
 export function scriptFor(section: Section): NarrationLine[] {
-  if (section.narration.length) return splitLongLines(section.narration);
-  return scriptFromText(sectionText(section).replace(/^\[p\..*?\]\s*/gm, ''), section.characters.map((c) => c.name));
+  if (section.narration.length) return withPages(splitLongLines(section.narration), section);
+
+  // built page by page, so every line knows which page it came off
+  const names = section.characters.map((c) => c.name);
+  const lines: NarrationLine[] = [];
+  for (const page of section.pages) {
+    if (!page.text.trim()) continue;
+    for (const line of scriptFromText(page.text, names)) {
+      lines.push({ ...line, page: page.label || undefined });
+    }
+  }
+  return lines;
+}
+
+const normalise = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * An AI script comes back as plain lines with no page markers, so match each one
+ * back to the page whose text contains it. The search only ever moves forwards,
+ * because a script runs in the same order as the pages do.
+ */
+function withPages(lines: NarrationLine[], section: Section): NarrationLine[] {
+  const pages = section.pages
+    .filter((p) => p.text.trim() && p.label)
+    .map((p) => ({ label: p.label, text: normalise(p.text) }));
+  if (!pages.length) return lines;
+
+  let at = 0;
+  return lines.map((line) => {
+    if (line.page) return line;
+    const probe = normalise(line.text).slice(0, 30);
+    if (probe.length > 8) {
+      for (let i = at; i < pages.length; i++) {
+        if (pages[i].text.includes(probe)) {
+          at = i;
+          break;
+        }
+      }
+    }
+    return { ...line, page: pages[at].label };
+  });
 }
 
 /** Every voice a script needs, narrator first. */

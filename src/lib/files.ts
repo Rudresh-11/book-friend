@@ -71,6 +71,19 @@ export async function exportBackup(json: string): Promise<string> {
   return file.uri;
 }
 
+/**
+ * Whether the document picker should copy the chosen file into the cache first.
+ *
+ * On Android it must NOT. expo-file-system waves through any content:// uri, but
+ * checks a file:// path against the app's allowed directories — and inside Expo
+ * Go those directories are scoped to the experience, while the picker's copy
+ * lands in Expo Go's own cache. Reading it then fails with "Missing 'READ'
+ * permission for accessing the file". Taking the raw content:// uri sidesteps
+ * that entirely. iOS keeps the copy, where the original url is security-scoped
+ * and can go out of reach once the picker closes.
+ */
+export const COPY_PICKED_FILE = Platform.OS !== 'android';
+
 /** The bit of a DocumentPicker asset this needs — narrowed so callers don't have to import the picker's types here. */
 type PickedFile = { uri: string; file?: File | null };
 
@@ -79,6 +92,21 @@ export async function readTextFile(asset: PickedFile): Promise<string> {
   // blob: URL that expo-file-system's File class does not understand); everywhere
   // else it hands back a file:// / content:// uri that expo-file-system does.
   if (Platform.OS === 'web' && asset.file) return await asset.file.text();
-  const file = new ExpoFile(asset.uri);
-  return await file.text();
+
+  try {
+    return await new ExpoFile(asset.uri).text();
+  } catch (e: any) {
+    // Last resort: pull it into our own folder, which is always readable, and
+    // read the copy instead.
+    try {
+      const dest = new ExpoFile(Paths.document, `restore-${Date.now()}.json`);
+      if (dest.exists) dest.delete();
+      await new ExpoFile(asset.uri).copy(dest);
+      const text = await dest.text();
+      dest.delete();
+      return text;
+    } catch {
+      throw e;
+    }
+  }
 }

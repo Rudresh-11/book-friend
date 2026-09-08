@@ -29,8 +29,17 @@ export function useNarrator(lines: NarrationLine[], options: NarratorOptions) {
   linesRef.current = lines;
   optionsRef.current = options;
 
-  const speakFrom = useCallback((start: number) => {
+  /**
+   * Bumped every time the playhead is moved by hand. Speech.stop() makes the
+   * utterance it interrupts fire onDone, and that late callback used to advance
+   * the playhead one line past wherever you had just tapped — so the highlight
+   * ran ahead of the voice. A callback from an older generation is ignored.
+   */
+  const genRef = useRef(0);
+
+  const speakFrom = useCallback((start: number, gen: number) => {
     const script = linesRef.current;
+    if (gen !== genRef.current) return;
     if (start >= script.length) {
       playingRef.current = false;
       setPlaying(false);
@@ -45,37 +54,40 @@ export function useNarrator(lines: NarrationLine[], options: NarratorOptions) {
     const o = optionsRef.current;
     const delivery = deliveryFor(line, o.cast, o.rate, o.pitch, o.narratorVoice);
 
+    const carryOn = () => {
+      if (gen !== genRef.current || !playingRef.current) return;
+      speakFrom(start + 1, gen);
+    };
+
     Speech.speak(line.text, {
       voice: delivery.voice,
       rate: delivery.rate,
       pitch: delivery.pitch,
-      onDone: () => {
-        // onDone also fires when we stop on purpose; only carry on if still playing
-        if (playingRef.current) speakFrom(indexRef.current + 1);
-      },
-      onError: () => {
-        if (playingRef.current) speakFrom(indexRef.current + 1);
-      },
+      onDone: carryOn,
+      onError: carryOn,
     });
   }, []);
 
   const play = useCallback(
     (from?: number) => {
+      const gen = ++genRef.current; // invalidates callbacks from the utterance we are about to stop
       Speech.stop();
       playingRef.current = true;
       setPlaying(true);
-      speakFrom(from ?? indexRef.current);
+      speakFrom(from ?? indexRef.current, gen);
     },
     [speakFrom]
   );
 
   const pause = useCallback(() => {
+    genRef.current += 1;
     playingRef.current = false;
     setPlaying(false);
     Speech.stop();
   }, []);
 
   const stop = useCallback(() => {
+    genRef.current += 1;
     playingRef.current = false;
     setPlaying(false);
     Speech.stop();
@@ -86,9 +98,14 @@ export function useNarrator(lines: NarrationLine[], options: NarratorOptions) {
   const jumpTo = useCallback(
     (to: number) => {
       const clamped = Math.max(0, Math.min(linesRef.current.length - 1, to));
+      if (playingRef.current) {
+        play(clamped); // moves the playhead and the highlight together
+        return;
+      }
+      genRef.current += 1;
+      Speech.stop();
       indexRef.current = clamped;
       setIndex(clamped);
-      if (playingRef.current) play(clamped);
     },
     [play]
   );
@@ -96,6 +113,7 @@ export function useNarrator(lines: NarrationLine[], options: NarratorOptions) {
   // never leave a voice talking after the screen is gone
   useEffect(() => {
     return () => {
+      genRef.current += 1;
       playingRef.current = false;
       Speech.stop();
     };

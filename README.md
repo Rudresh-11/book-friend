@@ -59,7 +59,10 @@ Or copy one panel's prompt at a time and drop each picture onto its own panel;
 "fill empty panels" takes a batch at once and lays them out in order. Panels can
 also be written by hand.
 
-**Listen to it.** A Listen tab reads a chapter aloud with the phone's own
+**Listen to it.** A Listen tab follows where you actually are — the book you're
+reading sits at the top, chapters stay in reading order, and the one you're on is
+marked "reading now" (or "up next"), with a "carry on where you are" card above
+the lot. It reads a chapter aloud with the phone's own
 text-to-speech: free, offline, nothing uploaded. Dialogue is separated from
 narration automatically — anything in quotation marks is a character, and
 "said Neema" style attribution picks up who — so each character gets their own

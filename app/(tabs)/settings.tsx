@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Chip, Field, Label, Row, SectionHeading } from '../../src/components/ui';
 import { notify } from '../../src/lib/alert';
-import { exportBackup, readTextFile } from '../../src/lib/files';
+import { COPY_PICKED_FILE, exportBackup, readTextFile } from '../../src/lib/files';
 import { isOcrAvailable } from '../../src/lib/ocr';
 import { useLibrary } from '../../src/store';
 import { useTheme } from '../../src/theme';
@@ -35,7 +35,10 @@ export default function Settings() {
 
   const doImport = async () => {
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
+      const res = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: COPY_PICKED_FILE,
+      });
       if (res.canceled || !res.assets?.[0]) return;
       const text = await readTextFile(res.assets[0]);
       const data = JSON.parse(text);

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  PanResponder,
   Pressable,
   StyleProp,
   StyleSheet,
@@ -243,6 +244,75 @@ export function Collapsible({
           </Text>
         </Pressable>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * A plain drag-anywhere slider. Written by hand rather than pulled in as a
+ * dependency so it behaves the same in Expo Go, in a build and on the web.
+ */
+export function Slider({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (value: number) => void;
+}) {
+  const t = useTheme();
+  const [width, setWidth] = useState(0);
+  const widthRef = useRef(0);
+
+  const commit = (x: number) => {
+    const w = widthRef.current;
+    if (!w) return;
+    const ratio = Math.max(0, Math.min(1, x / w));
+    let next = min + ratio * (max - min);
+    if (step) next = Math.round(next / step) * step;
+    onChange(Math.max(min, Math.min(max, Number(next.toFixed(2)))));
+  };
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => commit(e.nativeEvent.locationX),
+      onPanResponderMove: (e) => commit(e.nativeEvent.locationX),
+    })
+  ).current;
+
+  const ratio = max === min ? 0 : Math.max(0, Math.min(1, (value - min) / (max - min)));
+
+  return (
+    <View
+      {...pan.panHandlers}
+      onLayout={(e) => {
+        widthRef.current = e.nativeEvent.layout.width;
+        setWidth(e.nativeEvent.layout.width);
+      }}
+      // generous touch target around a thin track
+      style={{ height: 34, justifyContent: 'center' }}>
+      <View style={{ height: 4, borderRadius: 2, backgroundColor: t.cardAlt, overflow: 'hidden' }}>
+        <View style={{ width: `${ratio * 100}%`, height: '100%', backgroundColor: t.accent }} />
+      </View>
+      <View
+        style={{
+          position: 'absolute',
+          left: Math.max(0, ratio * width - 11),
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          backgroundColor: t.accent,
+          borderWidth: 2,
+          borderColor: t.card,
+        }}
+      />
     </View>
   );
 }

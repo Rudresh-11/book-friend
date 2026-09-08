@@ -29,6 +29,8 @@ export type NarrationLine = {
   text: string;
   /** how it is said — drives pace and pitch, e.g. "afraid", "angry", "gentle" */
   mood?: string;
+  /** the page this line came off, so you can see where the reading has got to */
+  page?: string;
 };
 
 /** How one character sounds: which device voice, and how it is pitched and paced. */
@@ -148,6 +150,8 @@ export type Settings = {
   narratorVoice?: string;
   narrationRate: number;
   narrationPitch: number;
+  /** hides the "cast it with an AI" nudge on the player once dismissed */
+  castHintOff?: boolean;
 };
 
 export type LibraryState = {
