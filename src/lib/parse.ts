@@ -20,6 +20,7 @@ export type AiPayload = {
   quotes?: { text: string; page?: string; note?: string }[];
   vocabulary?: { word: string; meaning?: string }[];
   panels?: { scene: string; prompt: string }[];
+  lines?: { speaker: string; text: string; mood?: string }[];
   pages?: { label?: string; text: string }[];
   sections?: { kind?: string; number?: string; title?: string }[];
 };
@@ -91,6 +92,7 @@ export function parseAiResponse(kind: PromptKind, raw: string): ParseResult {
     section: 'summary',
     recap: 'recap',
     comic: 'notes',
+    narrate: 'notes',
     discuss: 'notes',
     outline: 'blurb',
     storySoFar: 'storySoFar',
@@ -160,6 +162,20 @@ function normalise(raw: any): AiPayload {
         .filter((p: any) => p.scene || p.prompt)
     : [];
 
+  out.lines = Array.isArray(raw.lines ?? raw.script)
+    ? (raw.lines ?? raw.script)
+        .map((l: any) =>
+          typeof l === 'string'
+            ? { speaker: 'Narrator', text: l, mood: '' }
+            : {
+                speaker: str(l?.speaker ?? l?.who ?? l?.character) || 'Narrator',
+                text: str(l?.text ?? l?.line ?? l?.said),
+                mood: str(l?.mood ?? l?.tone ?? l?.emotion),
+              }
+        )
+        .filter((l: any) => l.text)
+    : [];
+
   out.pages = Array.isArray(raw.pages)
     ? raw.pages
         .map((p: any) => (typeof p === 'string' ? { text: p } : { label: str(p?.label ?? p?.page), text: str(p?.text) }))
@@ -197,6 +213,7 @@ export function describeChanges(d: AiPayload): string[] {
   push(d.quotes?.length, 'quote');
   push(d.vocabulary?.length, 'vocabulary word');
   push(d.panels?.length, 'comic panel');
+  push(d.lines?.length, 'spoken line');
   push(d.pages?.length, 'transcribed page');
   push(d.sections?.length, 'chapter');
   return out;

@@ -1,0 +1,117 @@
+import * as Speech from 'expo-speech';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CastVoice, NarrationLine } from '../types';
+import { deliveryFor } from './narrate';
+
+export type NarratorOptions = {
+  cast: CastVoice[];
+  rate: number;
+  pitch: number;
+  narratorVoice?: string;
+};
+
+/**
+ * Speaks a script one line at a time, moving on in each utterance's onDone.
+ *
+ * Speech.pause()/resume() only exist on iOS and web, so pausing here means
+ * stopping and remembering the line — which behaves the same everywhere and
+ * also gives us the current line to highlight while it reads.
+ */
+export function useNarrator(lines: NarrationLine[], options: NarratorOptions) {
+  const [index, setIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
+
+  // the callbacks live for as long as an utterance does, so they read live values
+  const linesRef = useRef(lines);
+  const optionsRef = useRef(options);
+  const playingRef = useRef(false);
+  const indexRef = useRef(0);
+  linesRef.current = lines;
+  optionsRef.current = options;
+
+  const speakFrom = useCallback((start: number) => {
+    const script = linesRef.current;
+    if (start >= script.length) {
+      playingRef.current = false;
+      setPlaying(false);
+      setIndex(0);
+      indexRef.current = 0;
+      return;
+    }
+    indexRef.current = start;
+    setIndex(start);
+
+    const line = script[start];
+    const o = optionsRef.current;
+    const delivery = deliveryFor(line, o.cast, o.rate, o.pitch, o.narratorVoice);
+
+    Speech.speak(line.text, {
+      voice: delivery.voice,
+      rate: delivery.rate,
+      pitch: delivery.pitch,
+      onDone: () => {
+        // onDone also fires when we stop on purpose; only carry on if still playing
+        if (playingRef.current) speakFrom(indexRef.current + 1);
+      },
+      onError: () => {
+        if (playingRef.current) speakFrom(indexRef.current + 1);
+      },
+    });
+  }, []);
+
+  const play = useCallback(
+    (from?: number) => {
+      Speech.stop();
+      playingRef.current = true;
+      setPlaying(true);
+      speakFrom(from ?? indexRef.current);
+    },
+    [speakFrom]
+  );
+
+  const pause = useCallback(() => {
+    playingRef.current = false;
+    setPlaying(false);
+    Speech.stop();
+  }, []);
+
+  const stop = useCallback(() => {
+    playingRef.current = false;
+    setPlaying(false);
+    Speech.stop();
+    setIndex(0);
+    indexRef.current = 0;
+  }, []);
+
+  const jumpTo = useCallback(
+    (to: number) => {
+      const clamped = Math.max(0, Math.min(linesRef.current.length - 1, to));
+      indexRef.current = clamped;
+      setIndex(clamped);
+      if (playingRef.current) play(clamped);
+    },
+    [play]
+  );
+
+  // never leave a voice talking after the screen is gone
+  useEffect(() => {
+    return () => {
+      playingRef.current = false;
+      Speech.stop();
+    };
+  }, []);
+
+  return { index, playing, play, pause, stop, jumpTo, toggle: () => (playingRef.current ? pause() : play()) };
+}
+
+/** Voices installed on this phone, best-sounding first where we can tell. */
+export async function listVoices(language = 'en') {
+  try {
+    const all = await Speech.getAvailableVoicesAsync();
+    return all
+      .filter((v) => !language || v.language?.toLowerCase().startsWith(language.toLowerCase()))
+      .sort((a, b) => (a.quality === b.quality ? 0 : a.quality === 'Enhanced' ? -1 : 1));
+  } catch {
+    return [];
+  }
+}

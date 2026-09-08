@@ -249,6 +249,7 @@ export default function SectionScreen() {
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
           <Button small icon="sparkles-outline" label="Summarise" onPress={() => goAi('section')} />
           <Button small variant="soft" icon="color-palette-outline" label="Comic" onPress={() => goAi('comic')} />
+          <Button small variant="soft" icon="headset-outline" label="Cast for reading" onPress={() => goAi('narrate')} />
           <Button small variant="soft" icon="search-outline" label="Go deeper" onPress={() => goAi('discuss')} />
           <Button small variant="soft" icon="play-back-outline" label="Recap" onPress={() => goAi('recap')} />
         </Row>

@@ -1,7 +1,15 @@
 import type { Book, Section, Settings } from '../types';
 import { sectionLabel } from '../store';
 
-export type PromptKind = 'transcribe' | 'section' | 'recap' | 'comic' | 'discuss' | 'outline' | 'storySoFar';
+export type PromptKind =
+  | 'transcribe'
+  | 'section'
+  | 'recap'
+  | 'comic'
+  | 'narrate'
+  | 'discuss'
+  | 'outline'
+  | 'storySoFar';
 
 export type PromptDef = {
   kind: PromptKind;
@@ -37,6 +45,12 @@ export const PROMPTS: PromptDef[] = [
     title: 'Draw it as a comic',
     blurb: 'Breaks the chapter into scenes and writes an image prompt for each one, ready for an image AI.',
     icon: '🎨',
+  },
+  {
+    kind: 'narrate',
+    title: 'Cast it for reading aloud',
+    blurb: 'Marks every line with who says it and how it sounds, so the Listen tab can read it in different voices.',
+    icon: '🎧',
   },
   {
     kind: 'discuss',
@@ -231,6 +245,25 @@ export function buildPrompt({ kind, book, section, previous = [], settings }: Bu
         JSON_RULES,
         'Shape:',
         '{"kind":"comic","panels":[{"scene":"what happens here, one or two lines","prompt":"the full image prompt for this panel"}]}',
+        flavour,
+      ].join('\n');
+
+    case 'narrate':
+      return [
+        header(book, section, settings),
+        '',
+        'Chapter text:',
+        '"""',
+        text || (section?.summary ?? ''),
+        '"""',
+        truncationNote,
+        '',
+        'Turn this into a script for reading aloud. Split it into short lines, in the order they are read. Every line gets the name of whoever says it: use "Narrator" for everything that is not spoken by a character, and the character’s name for dialogue. Work out who is speaking from the text, including where the book only implies it — use "Someone" only when it is genuinely unclear.',
+        'Give every line a mood in one word, meaning how it should sound out loud. Stick to these: neutral, gentle, tender, thoughtful, solemn, sad, grieving, afraid, tense, urgent, angry, stern, excited, happy, amused, whisper.',
+        'Keep the words exactly as the book has them. Do not rewrite, summarise, add or cut anything — only split the text, say who speaks it, and mark the mood. Leave out page numbers and running headers. For dialogue, drop the quotation marks and give just the spoken words.',
+        JSON_RULES,
+        'Shape:',
+        '{"kind":"narrate","lines":[{"speaker":"Narrator","text":"the words exactly as printed","mood":"neutral"},{"speaker":"Bilbo","text":"the spoken words, without quotation marks","mood":"afraid"}]}',
         flavour,
       ].join('\n');
 

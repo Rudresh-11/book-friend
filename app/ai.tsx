@@ -33,7 +33,8 @@ export default function AiBridge() {
   const previous = section ? siblings.filter((s) => s.order < section.order) : siblings.filter((s) => s.status === 'read');
 
   const def = PROMPTS.find((p) => p.kind === kind)!;
-  const needsSection = kind === 'section' || kind === 'comic' || kind === 'discuss' || kind === 'transcribe';
+  const needsSection =
+    kind === 'section' || kind === 'comic' || kind === 'narrate' || kind === 'discuss' || kind === 'transcribe';
 
   const prompt = useMemo(() => {
     if (!book) return '';
@@ -283,6 +284,21 @@ export default function AiBridge() {
       }
       store.updateSection(section.id, patch as any);
 
+      if (d.lines?.length) {
+        const lines = d.lines.map((l) => ({ speaker: l.speaker || 'Narrator', text: l.text, mood: l.mood }));
+        store.setNarration(section.id, lines);
+        const voices = Array.from(new Set(lines.map((l) => l.speaker))).filter((s) => s !== 'Narrator');
+        add({
+          title: 'Reading script',
+          where: 'in the Listen tab',
+          items: [
+            `${lines.length} lines`,
+            voices.length ? `voices for ${voices.join(', ')}` : 'narrator only',
+          ],
+          note: section.narration.length ? 'replaced the old script' : 'open Listen to hear it',
+        });
+      }
+
       if (d.panels?.length) {
         const panels = d.panels.map((p) => ({ scene: p.scene, prompt: p.prompt }));
         store.addPanels(section.id, panels);
@@ -355,7 +371,7 @@ export default function AiBridge() {
 
         <SectionHeading>What do you want?</SectionHeading>
         <Row style={{ flexWrap: 'wrap' }}>
-          {PROMPTS.filter((p) => (section ? true : !['transcribe', 'section', 'comic', 'discuss'].includes(p.kind))).map((p) => (
+          {PROMPTS.filter((p) => (section ? true : !['transcribe', 'section', 'comic', 'narrate', 'discuss'].includes(p.kind))).map((p) => (
             <Chip key={p.kind} label={`${p.icon} ${p.title}`} active={kind === p.kind} onPress={() => setKind(p.kind)} />
           ))}
         </Row>

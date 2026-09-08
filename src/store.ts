@@ -4,8 +4,10 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   Book,
   BookStatus,
+  CastVoice,
   ComicPanel,
   ComicSheet,
+  NarrationLine,
   LibraryState,
   PageShot,
   ReadingSession,
@@ -23,6 +25,8 @@ const DEFAULT_SETTINGS: Settings = {
   language: 'English',
   dailyGoalMinutes: 20,
   spoilerSafe: true,
+  narrationRate: 0.95,
+  narrationPitch: 1,
 };
 
 export function emptySection(bookId: string, order: number, kind: SectionKind): Section {
@@ -44,6 +48,7 @@ export function emptySection(bookId: string, order: number, kind: SectionKind): 
     vocabulary: [],
     comic: [],
     comicSheets: [],
+    narration: [],
     myNotes: '',
     mood: '',
     difficulty: 0,
@@ -73,6 +78,9 @@ type Actions = {
   removePanel: (sectionId: string, panelId: string) => void;
   addComicSheet: (sectionId: string, sheet: Omit<ComicSheet, 'id' | 'createdAt'>) => void;
   removeComicSheet: (sectionId: string, sheetId: string) => void;
+
+  setNarration: (sectionId: string, lines: NarrationLine[]) => void;
+  setCastVoice: (bookId: string, name: string, patch: Partial<CastVoice>) => void;
 
   addSession: (s: Omit<ReadingSession, 'id'>) => void;
   removeSession: (id: string) => void;
@@ -108,6 +116,7 @@ export const useLibrary = create<Store>()(
           storySoFar: b.storySoFar ?? '',
           openThreads: b.openThreads ?? [],
           keyPeople: b.keyPeople ?? [],
+          cast: b.cast ?? [],
           myNotes: b.myNotes ?? '',
           createdAt: Date.now(),
           startedAt: b.status === 'want' ? undefined : Date.now(),
@@ -268,6 +277,23 @@ export const useLibrary = create<Store>()(
           ),
         }),
 
+      setNarration: (sectionId, lines) =>
+        set({
+          sections: get().sections.map((s) => (s.id === sectionId ? { ...s, narration: lines } : s)),
+        }),
+
+      setCastVoice: (bookId, name, patch) =>
+        set({
+          books: get().books.map((b) => {
+            if (b.id !== bookId) return b;
+            const found = b.cast.find((c) => c.name.toLowerCase() === name.toLowerCase());
+            const cast = found
+              ? b.cast.map((c) => (c === found ? { ...c, ...patch } : c))
+              : [...b.cast, { name, pitch: 1, rate: 1, ...patch }];
+            return { ...b, cast };
+          }),
+        }),
+
       addSession: (s) => set({ sessions: [{ ...s, id: uid() }, ...get().sessions] }),
       removeSession: (id) => set({ sessions: get().sessions.filter((s) => s.id !== id) }),
 
@@ -324,6 +350,7 @@ function fillBook(b: any): Book {
     storySoFar: b?.storySoFar ?? '',
     openThreads: b?.openThreads ?? [],
     keyPeople: b?.keyPeople ?? [],
+    cast: b?.cast ?? [],
     myNotes: b?.myNotes ?? '',
     rating: b?.rating ?? 0,
   };
@@ -343,6 +370,7 @@ function fillSection(s: any): Section {
     vocabulary: rest.vocabulary ?? [],
     comic: rest.comic ?? [],
     comicSheets: rest.comicSheets ?? [],
+    narration: rest.narration ?? [],
     myNotes: rest.myNotes ?? '',
     mood: rest.mood ?? '',
     difficulty: rest.difficulty ?? 0,

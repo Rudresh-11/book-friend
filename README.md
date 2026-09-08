@@ -34,6 +34,7 @@ all appear in their own places. Seven prompts ship with it:
 | Summarise this chapter | The full chapter screen — summary, recap, key points, characters, quotes, words |
 | Recap before I continue | A "previously on…" refresher built from everything read so far |
 | Draw it as a comic | The chapter split into scenes, each with an image prompt |
+| Cast it for reading aloud | Every line marked with who says it and how, for the Listen tab |
 | Go deeper | Themes, symbolism, discussion questions |
 | Outline the book | Blurb, genre, tags and the whole chapter list — creates the chapters for you |
 | Story so far | One running summary of the book, plus the threads still hanging |
@@ -57,6 +58,15 @@ out in a grid — save that single picture and it becomes the chapter's comic pa
 Or copy one panel's prompt at a time and drop each picture onto its own panel;
 "fill empty panels" takes a batch at once and lays them out in order. Panels can
 also be written by hand.
+
+**Listen to it.** A Listen tab reads a chapter aloud with the phone's own
+text-to-speech: free, offline, nothing uploaded. Dialogue is separated from
+narration automatically — anything in quotation marks is a character, and
+"said Neema" style attribution picks up who — so each character gets their own
+pitch and pace. Run the "Cast it for reading aloud" prompt and an AI marks every
+line with who says it and the mood, which drives the delivery (grief slows down
+and drops, fear speeds up and rises). Tap any line to jump there; each speaker's
+voice can be swapped for any voice installed on the phone.
 
 **Know where you are.** Give a chapter its first and last page and the chapter
 screen draws a progress bar from the page numbers on your scans — "you are on
@@ -95,7 +105,7 @@ with the photos attached in the other app.
 
 ```
 app/                       expo-router screens
-  (tabs)/                  Library · Progress · Settings
+  (tabs)/                  Library · Listen · Progress · Settings
   book/new, book/[id]/     add, view and edit a book
   section/[id]/            a chapter, its page scans and its comic
   ai.tsx                   the copy-prompt / paste-answer bridge
@@ -106,6 +116,8 @@ src/
   lib/prompts.ts           prompt text and the JSON contract for each kind
   lib/parse.ts             forgiving parser for whatever the AI replied
   lib/ocr.ts               ML Kit wrapper, with a graceful fallback
+  lib/narrate.ts           dialogue detection, character voices, mood-to-delivery
+  lib/useNarrator.ts       drives expo-speech line by line
   lib/files.ts             photo storage, backup export/import
   components/              shared UI
 ```

@@ -26,6 +26,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="listen"
+        options={{
+          title: 'Listen',
+          tabBarIcon: ({ color, size }) => <Ionicons name="headset-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="stats"
         options={{
           title: 'Progress',

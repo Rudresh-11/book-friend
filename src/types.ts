@@ -21,6 +21,26 @@ export type Person = { name: string; note: string };
 export type Term = { word: string; meaning: string };
 
 /**
+ * One spoken line. "Narrator" is the voice for everything outside quotation
+ * marks; anything else is a character speaking.
+ */
+export type NarrationLine = {
+  speaker: string;
+  text: string;
+  /** how it is said — drives pace and pitch, e.g. "afraid", "angry", "gentle" */
+  mood?: string;
+};
+
+/** How one character sounds: which device voice, and how it is pitched and paced. */
+export type CastVoice = {
+  name: string;
+  /** identifier from the phone's installed voices */
+  voice?: string;
+  pitch: number;
+  rate: number;
+};
+
+/**
  * A whole comic page in one picture — what an image AI hands back when you give
  * it every panel prompt at once, with all the scenes laid out in a grid.
  */
@@ -69,6 +89,8 @@ export type Section = {
   comic: ComicPanel[];
   /** whole-page versions of the comic, one picture holding every panel */
   comicSheets: ComicSheet[];
+  /** an AI-cast reading script: who says each line, and how */
+  narration: NarrationLine[];
   myNotes: string;
   mood: string;
   difficulty: number;
@@ -94,6 +116,8 @@ export type Book = {
   openThreads: string[];
   /** who matters right now, from the same answers */
   keyPeople: Person[];
+  /** the voice each character is read in, kept for the whole book */
+  cast: CastVoice[];
   myNotes: string;
   createdAt: number;
   startedAt?: number;
@@ -120,6 +144,10 @@ export type Settings = {
   language: string;
   dailyGoalMinutes: number;
   spoilerSafe: boolean;
+  /** read-aloud settings */
+  narratorVoice?: string;
+  narrationRate: number;
+  narrationPitch: number;
 };
 
 export type LibraryState = {
