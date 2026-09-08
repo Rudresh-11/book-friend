@@ -3,7 +3,19 @@ import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Body, Button, Card, Chip, Empty, Label, Row, SectionHeading, Slider, Title } from '../../src/components/ui';
+import {
+  Body,
+  Button,
+  Card,
+  Chip,
+  Dropdown,
+  Empty,
+  Label,
+  Row,
+  SectionHeading,
+  Slider,
+  Title,
+} from '../../src/components/ui';
 import { NARRATOR, defaultVoiceFor, scriptFor, speakersIn } from '../../src/lib/narrate';
 import { listVoices, useNarrator } from '../../src/lib/useNarrator';
 import { sectionLabel, sectionsOf, useLibrary } from '../../src/store';
@@ -18,6 +30,14 @@ type Voice = {
 
 const hasText = (s: { narration: unknown[]; pages: { text: string }[] }) =>
   s.narration.length > 0 || s.pages.some((p) => p.text.trim());
+
+/** The only speeds worth having, as a short list rather than a fiddly slider. */
+const SPEEDS = [
+  { value: 0.5, label: '0.5×' },
+  { value: 1, label: '1×' },
+  { value: 1.5, label: '1.5×' },
+  { value: 2, label: '2×' },
+];
 
 const STATUS_LABEL: Record<string, string> = {
   reading: 'Reading',
@@ -39,6 +59,8 @@ export default function ListenTab() {
   const [minimized, setMinimized] = useState(false);
   const [focus, setFocus] = useState(false);
   const [picking, setPicking] = useState<string | null>(null);
+  /** the line the seek bar is being dragged to, before the finger lifts */
+  const [scrub, setScrub] = useState<number | null>(null);
   const listRef = useRef<ScrollView>(null);
   /** where each line sits in the scroll content, and how tall the window is */
   const offsets = useRef<number[]>([]);
@@ -80,13 +102,12 @@ export default function ListenTab() {
   );
 
   /**
-   * Keep the line being spoken on screen. This fires when the reading moves on
-   * and the moment play is pressed, so hitting play always brings you back to
-   * wherever the voice actually is rather than leaving you to hunt for it.
-   * The line settles a third of the way down, so the words coming next are visible.
+   * Keep the current line on screen: as the reading moves on, when play is
+   * pressed, and after a seek — so you never have to hunt for where the voice
+   * actually is. The line settles a third of the way down, leaving the words
+   * coming next in view.
    */
   useEffect(() => {
-    if (!narrator.playing) return;
     const y = offsets.current[narrator.index];
     if (y == null) return;
     listRef.current?.scrollTo({
@@ -298,6 +319,7 @@ export default function ListenTab() {
   const prev = siblings[here - 1];
   const next = siblings[here + 1];
   const rate = state.settings.narrationRate;
+  const seekAt = scrub ?? narrator.index;
   // the page the current line came off, so you know where the voice has got to
   const page = script[narrator.index]?.page;
 
@@ -474,7 +496,8 @@ export default function ListenTab() {
             </Pressable>
             <Body muted style={{ flex: 1, fontSize: 12 }} numberOfLines={1}>
               {page ? `p. ${page} · ` : ''}
-              {Math.min(narrator.index + 1, script.length)}/{script.length} · {rate.toFixed(2)}×
+              {Math.min(narrator.index + 1, script.length)}/{script.length} ·{' '}
+              {SPEEDS.find((s) => s.value === rate)?.label ?? `${rate}×`}
             </Body>
             <Pressable onPress={() => setFocus((f) => !f)} hitSlop={10}>
               <Ionicons
@@ -498,13 +521,7 @@ export default function ListenTab() {
               </Row>
             ) : null}
             <Row style={{ justifyContent: 'space-between' }}>
-              <Pressable onPress={() => setFocus((f) => !f)} hitSlop={10} style={{ width: 24 }}>
-                <Ionicons
-                  name={focus ? 'contract-outline' : 'expand-outline'}
-                  size={21}
-                  color={focus ? t.accent : t.muted}
-                />
-              </Pressable>
+              <Dropdown label="Speed" value={rate} options={SPEEDS} onChange={(v) => updateSettings({ narrationRate: v })} />
               <Row gap={14}>
                 <Pressable onPress={() => narrator.jumpTo(narrator.index - 1)} hitSlop={10}>
                   <Ionicons name="play-skip-back" size={26} color={t.text} />
@@ -526,37 +543,40 @@ export default function ListenTab() {
                   <Ionicons name="play-skip-forward" size={26} color={t.text} />
                 </Pressable>
               </Row>
-              <Pressable onPress={() => setMinimized(true)} hitSlop={10} style={{ width: 24, alignItems: 'flex-end' }}>
-                <Ionicons name="chevron-down" size={22} color={t.muted} />
-              </Pressable>
+              <Row gap={14}>
+                <Pressable onPress={() => setFocus((f) => !f)} hitSlop={10}>
+                  <Ionicons
+                    name={focus ? 'contract-outline' : 'expand-outline'}
+                    size={21}
+                    color={focus ? t.accent : t.muted}
+                  />
+                </Pressable>
+                <Pressable onPress={() => setMinimized(true)} hitSlop={10}>
+                  <Ionicons name="chevron-down" size={22} color={t.muted} />
+                </Pressable>
+              </Row>
             </Row>
 
+            {/* seek through the chapter — the line only changes when you let go,
+                so it doesn't restart the voice on every pixel of the drag */}
             <Row gap={10}>
-              <Body muted style={{ fontSize: 12, width: 44 }}>
-                Speed
-              </Body>
               <View style={{ flex: 1 }}>
                 <Slider
-                  value={rate}
-                  min={0.3}
-                  max={3}
-                  step={0.05}
-                  onChange={(v) => updateSettings({ narrationRate: v })}
+                  value={seekAt}
+                  min={0}
+                  max={Math.max(0, script.length - 1)}
+                  step={1}
+                  onChange={setScrub}
+                  onCommit={(v) => {
+                    setScrub(null);
+                    narrator.jumpTo(v);
+                  }}
                 />
               </View>
-              <Pressable onPress={() => updateSettings({ narrationRate: 1 })} hitSlop={8}>
-                <Body
-                  style={{
-                    color: t.accent,
-                    fontSize: 12,
-                    fontWeight: '700',
-                    width: 44,
-                    textAlign: 'right',
-                  }}
-                >
-                  {rate.toFixed(2)}×
-                </Body>
-              </Pressable>
+              <Body muted style={{ fontSize: 12, minWidth: 80, textAlign: 'right' }} numberOfLines={1}>
+                {scrub !== null && script[scrub]?.page ? `p. ${script[scrub]?.page} · ` : ''}
+                {Math.min(seekAt + 1, script.length)}/{script.length}
+              </Body>
             </Row>
 
             {prev || next ? (

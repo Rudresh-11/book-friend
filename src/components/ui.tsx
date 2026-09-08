@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   PanResponder,
   Pressable,
   StyleProp,
@@ -258,32 +259,54 @@ export function Slider({
   max,
   step,
   onChange,
+  onCommit,
 }: {
   value: number;
   min: number;
   max: number;
   step?: number;
+  /** fires all through the drag */
   onChange: (value: number) => void;
+  /** fires once, when the finger lifts */
+  onCommit?: (value: number) => void;
 }) {
   const t = useTheme();
   const [width, setWidth] = useState(0);
-  const widthRef = useRef(0);
+  const track = useRef<View>(null);
+  const box = useRef({ x: 0, width: 0 });
+  const latest = useRef(value);
 
-  const commit = (x: number) => {
-    const w = widthRef.current;
-    if (!w) return;
-    const ratio = Math.max(0, Math.min(1, x / w));
+  const valueAt = (pageX: number) => {
+    const { x, width: w } = box.current;
+    if (!w) return latest.current;
+    const ratio = Math.max(0, Math.min(1, (pageX - x) / w));
     let next = min + ratio * (max - min);
     if (step) next = Math.round(next / step) * step;
-    onChange(Math.max(min, Math.min(max, Number(next.toFixed(2)))));
+    return Math.max(min, Math.min(max, Number(next.toFixed(2))));
   };
+
+  const measure = () => track.current?.measureInWindow((x, _y, w) => (box.current = { x, width: w }));
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => commit(e.nativeEvent.locationX),
-      onPanResponderMove: (e) => commit(e.nativeEvent.locationX),
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (e) => {
+        // Absolute screen coordinates, measured against the track's own position.
+        // locationX is relative to whatever child is under the finger — drag onto
+        // the thumb and it resets to nearly zero, which made the handle jump.
+        const next = valueAt(e.nativeEvent.pageX);
+        latest.current = next;
+        onChange(next);
+      },
+      onPanResponderMove: (e) => {
+        const next = valueAt(e.nativeEvent.pageX);
+        latest.current = next;
+        onChange(next);
+      },
+      onPanResponderRelease: () => onCommit?.(latest.current),
+      onPanResponderTerminate: () => onCommit?.(latest.current),
     })
   ).current;
 
@@ -291,10 +314,11 @@ export function Slider({
 
   return (
     <View
+      ref={track}
       {...pan.panHandlers}
       onLayout={(e) => {
-        widthRef.current = e.nativeEvent.layout.width;
         setWidth(e.nativeEvent.layout.width);
+        measure();
       }}
       // generous touch target around a thin track
       style={{ height: 34, justifyContent: 'center' }}>
@@ -302,9 +326,10 @@ export function Slider({
         <View style={{ width: `${ratio * 100}%`, height: '100%', backgroundColor: t.accent }} />
       </View>
       <View
+        pointerEvents="none"
         style={{
           position: 'absolute',
-          left: Math.max(0, ratio * width - 11),
+          left: Math.max(0, Math.min(width - 22, ratio * width - 11)),
           width: 22,
           height: 22,
           borderRadius: 11,
@@ -314,6 +339,87 @@ export function Slider({
         }}
       />
     </View>
+  );
+}
+
+/** A compact "current value ▾" button that opens a short list of choices. */
+export function Dropdown<T extends string | number>({
+  value,
+  options,
+  label,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  label?: string;
+  onChange: (value: T) => void;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const current = options.find((o) => o.value === value);
+
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          paddingVertical: 6,
+          paddingHorizontal: 12,
+          borderRadius: radius.pill,
+          borderWidth: 1,
+          borderColor: t.border,
+          backgroundColor: t.cardAlt,
+          opacity: pressed ? 0.75 : 1,
+        })}>
+        {label ? <Text style={{ color: t.muted, fontSize: 12 }}>{label}</Text> : null}
+        <Text style={{ color: t.text, fontSize: 13, fontWeight: '700' }}>{current?.label ?? String(value)}</Text>
+        <Ionicons name="chevron-down" size={13} color={t.muted} />
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable
+          onPress={() => setOpen(false)}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' }}>
+          <View
+            style={{
+              backgroundColor: t.card,
+              borderRadius: radius.md,
+              borderWidth: 1,
+              borderColor: t.border,
+              minWidth: 180,
+              paddingVertical: 6,
+            }}>
+            {options.map((o) => {
+              const active = o.value === value;
+              return (
+                <Pressable
+                  key={String(o.value)}
+                  onPress={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    backgroundColor: pressed ? t.cardAlt : 'transparent',
+                  })}>
+                  <Text style={{ color: active ? t.accent : t.text, fontSize: 15, fontWeight: active ? '700' : '500' }}>
+                    {o.label}
+                  </Text>
+                  {active ? <Ionicons name="checkmark" size={17} color={t.accent} /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
