@@ -250,6 +250,54 @@ export function Collapsible({
 }
 
 /**
+ * A long list that shows its first few entries and hides the rest behind a
+ * "Show N more" toggle — the same bargain Collapsible strikes for long text, so
+ * a chapter with forty key points doesn't bury everything underneath it.
+ */
+export function CollapsibleList<T>({
+  items,
+  limit = 4,
+  noun,
+  gap = 10,
+  wrap = false,
+  renderItem,
+}: {
+  items: T[];
+  limit?: number;
+  /** what the hidden entries are called, e.g. "quote" → "Show 3 more quotes" */
+  noun?: string;
+  gap?: number;
+  /** lay the entries out in a wrapping row instead of a column */
+  wrap?: boolean;
+  renderItem: (item: T, index: number) => React.ReactNode;
+}) {
+  const t = useTheme();
+  const [open, setOpen] = useState(false);
+  const hidden = items.length - limit;
+  const shown = open ? items : items.slice(0, limit);
+
+  return (
+    <View style={{ gap }}>
+      <View
+        style={{
+          gap,
+          flexDirection: wrap ? 'row' : 'column',
+          flexWrap: wrap ? 'wrap' : 'nowrap',
+        }}>
+        {shown.map(renderItem)}
+      </View>
+      {hidden > 0 ? (
+        <Pressable onPress={() => setOpen((v) => !v)} hitSlop={6}>
+          <Text style={{ color: t.accent, fontSize: 13, fontWeight: '700' }}>
+            {open ? 'Show less' : `Show ${hidden} more${noun ? ` ${noun}${hidden === 1 ? '' : 's'}` : ''}`}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/**
  * A plain drag-anywhere slider. Written by hand rather than pulled in as a
  * dependency so it behaves the same in Expo Go, in a build and on the web.
  */

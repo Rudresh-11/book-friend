@@ -4,7 +4,20 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { ReadingTimer } from '../../../src/components/ReadingTimer';
-import { Body, Button, Card, Chip, Field, Label, Progress, Row, SectionHeading, Title } from '../../../src/components/ui';
+import {
+  Body,
+  Button,
+  Card,
+  Chip,
+  Collapsible,
+  CollapsibleList,
+  Field,
+  Label,
+  Progress,
+  Row,
+  SectionHeading,
+  Title,
+} from '../../../src/components/ui';
 import { notify } from '../../../src/lib/alert';
 import { goBack } from '../../../src/lib/nav';
 import { wordCount } from '../../../src/lib/ocr';
@@ -353,7 +366,7 @@ export default function SectionScreen() {
           <>
             <SectionHeading>Recap</SectionHeading>
             <Card style={{ backgroundColor: t.accentSoft, borderColor: t.accentSoft }}>
-              <Body selectable>{section.recap}</Body>
+              <Collapsible text={section.recap} />
             </Card>
           </>
         ) : null}
@@ -362,7 +375,7 @@ export default function SectionScreen() {
           <>
             <SectionHeading>Summary</SectionHeading>
             <Card>
-              <Body selectable>{section.summary}</Body>
+              <Collapsible text={section.summary} lines={6} threshold={320} />
               {section.mood || section.difficulty ? (
                 <Row gap={8} style={{ marginTop: 12, flexWrap: 'wrap' }}>
                   {section.mood ? <Chip label={section.mood} /> : null}
@@ -376,13 +389,18 @@ export default function SectionScreen() {
         {section.keyPoints.length ? (
           <>
             <SectionHeading>Key points</SectionHeading>
-            <Card style={{ gap: 10 }}>
-              {section.keyPoints.map((p, i) => (
-                <Row key={i} gap={10} style={{ alignItems: 'flex-start' }}>
-                  <Body style={{ color: t.accent, fontWeight: '700' }}>{i + 1}</Body>
-                  <Body style={{ flex: 1 }} selectable>{p}</Body>
-                </Row>
-              ))}
+            <Card>
+              <CollapsibleList
+                items={section.keyPoints}
+                limit={5}
+                noun="point"
+                renderItem={(p, i) => (
+                  <Row key={i} gap={10} style={{ alignItems: 'flex-start' }}>
+                    <Body style={{ color: t.accent, fontWeight: '700' }}>{i + 1}</Body>
+                    <Body style={{ flex: 1 }} selectable>{p}</Body>
+                  </Row>
+                )}
+              />
             </Card>
           </>
         ) : null}
@@ -390,13 +408,18 @@ export default function SectionScreen() {
         {section.characters.length ? (
           <>
             <SectionHeading>Who's who</SectionHeading>
-            <Card style={{ gap: 12 }}>
-              {section.characters.map((c, i) => (
-                <View key={i}>
-                  <Body style={{ fontWeight: '700' }}>{c.name}</Body>
-                  {c.note ? <Body muted style={{ fontSize: 14 }}>{c.note}</Body> : null}
-                </View>
-              ))}
+            <Card>
+              <CollapsibleList
+                items={section.characters}
+                limit={4}
+                gap={12}
+                renderItem={(c, i) => (
+                  <View key={i}>
+                    <Body style={{ fontWeight: '700' }}>{c.name}</Body>
+                    {c.note ? <Body muted style={{ fontSize: 14 }}>{c.note}</Body> : null}
+                  </View>
+                )}
+              />
             </Card>
           </>
         ) : null}
@@ -404,13 +427,18 @@ export default function SectionScreen() {
         {section.vocabulary.length ? (
           <>
             <SectionHeading>Words</SectionHeading>
-            <Card style={{ gap: 10 }}>
-              {section.vocabulary.map((v, i) => (
-                <View key={i}>
-                  <Body style={{ fontWeight: '700' }}>{v.word}</Body>
-                  <Body muted style={{ fontSize: 14 }}>{v.meaning}</Body>
-                </View>
-              ))}
+            <Card>
+              <CollapsibleList
+                items={section.vocabulary}
+                limit={5}
+                noun="word"
+                renderItem={(v, i) => (
+                  <View key={i}>
+                    <Body style={{ fontWeight: '700' }}>{v.word}</Body>
+                    <Body muted style={{ fontSize: 14 }}>{v.meaning}</Body>
+                  </View>
+                )}
+              />
             </Card>
           </>
         ) : null}
@@ -418,25 +446,32 @@ export default function SectionScreen() {
         {section.themes.length ? (
           <>
             <SectionHeading>Themes</SectionHeading>
-            <Row style={{ flexWrap: 'wrap' }}>
-              {section.themes.map((th) => (
-                <Chip key={th} label={th} />
-              ))}
-            </Row>
+            <CollapsibleList
+              items={section.themes}
+              limit={8}
+              noun="theme"
+              gap={8}
+              wrap
+              renderItem={(th) => <Chip key={th} label={th} />}
+            />
           </>
         ) : null}
 
         {section.quotes.length ? (
           <>
             <SectionHeading>Lines worth keeping</SectionHeading>
-            <View style={{ gap: 8 }}>
-              {section.quotes.map((q, i) => (
+            <CollapsibleList
+              items={section.quotes}
+              limit={3}
+              noun="line"
+              gap={8}
+              renderItem={(q, i) => (
                 <Card key={i} style={{ borderLeftWidth: 3, borderLeftColor: t.accent }}>
-                  <Body selectable style={{ fontStyle: 'italic' }}>“{q.text}”</Body>
+                  <Collapsible text={`“${q.text}”`} lines={5} threshold={260} style={{ fontStyle: 'italic' }} />
                   {q.page ? <Body muted style={{ fontSize: 12, marginTop: 6 }}>p. {q.page}</Body> : null}
                 </Card>
-              ))}
-            </View>
+              )}
+            />
           </>
         ) : null}
 

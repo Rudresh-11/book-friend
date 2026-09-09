@@ -58,6 +58,7 @@ export default function ListenTab() {
   const [castOpen, setCastOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [focus, setFocus] = useState(false);
+  const [muted, setMuted] = useState(false);
   const [picking, setPicking] = useState<string | null>(null);
   /** the line the seek bar is being dragged to, before the finger lifts */
   const [scrub, setScrub] = useState<number | null>(null);
@@ -87,7 +88,19 @@ export default function ListenTab() {
     rate: state.settings.narrationRate,
     pitch: state.settings.narrationPitch,
     narratorVoice: state.settings.narratorVoice,
+    volume: muted ? 0 : 1,
   });
+
+  /**
+   * The line already being spoken keeps the volume it started with, so muting
+   * mid-sentence would not be heard until the next line. Restarting the current
+   * line applies it straight away — silently when muting, and re-reading the
+   * line you were on when unmuting.
+   */
+  useEffect(() => {
+    if (narrator.playing) narrator.play(narrator.index);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [muted]);
 
   useEffect(() => {
     listVoices(state.settings.language === 'English' ? 'en' : '').then((v) => setVoices(v as Voice[]));
@@ -498,7 +511,15 @@ export default function ListenTab() {
               {page ? `p. ${page} · ` : ''}
               {Math.min(narrator.index + 1, script.length)}/{script.length} ·{' '}
               {SPEEDS.find((s) => s.value === rate)?.label ?? `${rate}×`}
+              {muted ? ' · muted' : ''}
             </Body>
+            <Pressable onPress={() => setMuted((m) => !m)} hitSlop={10}>
+              <Ionicons
+                name={muted ? 'volume-mute' : 'volume-medium-outline'}
+                size={19}
+                color={muted ? t.accent : t.muted}
+              />
+            </Pressable>
             <Pressable onPress={() => setFocus((f) => !f)} hitSlop={10}>
               <Ionicons
                 name={focus ? 'contract-outline' : 'expand-outline'}
@@ -544,6 +565,13 @@ export default function ListenTab() {
                 </Pressable>
               </Row>
               <Row gap={14}>
+                <Pressable onPress={() => setMuted((m) => !m)} hitSlop={10}>
+                  <Ionicons
+                    name={muted ? 'volume-mute' : 'volume-medium-outline'}
+                    size={21}
+                    color={muted ? t.accent : t.muted}
+                  />
+                </Pressable>
                 <Pressable onPress={() => setFocus((f) => !f)} hitSlop={10}>
                   <Ionicons
                     name={focus ? 'contract-outline' : 'expand-outline'}

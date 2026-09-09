@@ -8,6 +8,8 @@ export type NarratorOptions = {
   rate: number;
   pitch: number;
   narratorVoice?: string;
+  /** 0 silences the voice while the reading keeps moving through the lines */
+  volume?: number;
 };
 
 /**
@@ -63,6 +65,9 @@ export function useNarrator(lines: NarrationLine[], options: NarratorOptions) {
       voice: delivery.voice,
       rate: delivery.rate,
       pitch: delivery.pitch,
+      // a silenced utterance still takes its normal time, so the highlight and
+      // the auto-scroll carry on at reading pace with the sound turned off
+      volume: o.volume ?? 1,
       onDone: carryOn,
       onError: carryOn,
     });
