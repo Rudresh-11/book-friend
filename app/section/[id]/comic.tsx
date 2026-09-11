@@ -60,7 +60,7 @@ export default function ComicScreen() {
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (res.canceled || !res.assets?.[0]) return;
       const asset = res.assets[0];
-      const uri = await persistPhoto(asset.uri, `sheet-${uid()}`);
+      const uri = await persistPhoto(asset.uri, `sheet-${uid()}`, 'art');
       addComicSheet(section.id, { uri, width: asset.width, height: asset.height });
     } catch (e: any) {
       notify('Could not add that comic page', e?.message ?? 'Unknown error');
@@ -85,7 +85,7 @@ export default function ComicScreen() {
     try {
       const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9 });
       if (res.canceled || !res.assets?.[0]) return;
-      const uri = await persistPhoto(res.assets[0].uri, `panel-${uid()}`);
+      const uri = await persistPhoto(res.assets[0].uri, `panel-${uid()}`, 'art');
       const old = panel.uri;
       updatePanel(section.id, panel.id, { uri });
       if (old && old !== uri) deletePhoto(old);
@@ -107,7 +107,7 @@ export default function ComicScreen() {
       });
       if (res.canceled || !res.assets?.length) return;
       for (let i = 0; i < res.assets.length && i < empty.length; i++) {
-        const uri = await persistPhoto(res.assets[i].uri, `panel-${uid()}`);
+        const uri = await persistPhoto(res.assets[i].uri, `panel-${uid()}`, 'art');
         updatePanel(section.id, empty[i].id, { uri });
       }
     } catch (e: any) {

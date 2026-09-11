@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, View } from 'react-native';
 import { ReadingTimer } from '../../../src/components/ReadingTimer';
 import {
   Body,
@@ -209,14 +209,25 @@ export default function SectionScreen() {
           </Card>
         ) : (
           <>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {section.pages.map((p) => (
-                <Pressable key={p.id} onPress={() => router.push(`/section/${section.id}/scan`)}>
+            {/* virtualised: a 300-page chapter must never decode 300 thumbnails at once */}
+            <FlatList
+              horizontal
+              data={section.pages}
+              keyExtractor={(p) => p.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8 }}
+              initialNumToRender={6}
+              maxToRenderPerBatch={6}
+              windowSize={5}
+              removeClippedSubviews
+              renderItem={({ item: p }) => (
+                <Pressable onPress={() => router.push(`/section/${section.id}/scan`)}>
                   {p.uri ? (
                     <Image
                       source={{ uri: p.uri }}
                       style={{ width: 84, height: 112, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
                       contentFit="cover"
+                      recyclingKey={p.id}
                     />
                   ) : (
                     <View
@@ -243,8 +254,8 @@ export default function SectionScreen() {
                     {p.label || '—'} {p.text ? '· text' : ''}
                   </Body>
                 </Pressable>
-              ))}
-            </ScrollView>
+              )}
+            />
             {words > 0 ? (
               <Body muted style={{ fontSize: 12, marginTop: 8 }}>
                 {words.toLocaleString()} words captured across {section.pages.filter((p) => p.text.trim()).length} scans
@@ -318,14 +329,24 @@ export default function SectionScreen() {
                 />
               </Pressable>
             ) : null}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {section.comic.map((panel, i) => (
-                <Pressable key={panel.id} onPress={() => router.push(`/section/${section.id}/comic`)}>
+            <FlatList
+              horizontal
+              data={section.comic}
+              keyExtractor={(panel) => panel.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8 }}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={5}
+              removeClippedSubviews
+              renderItem={({ item: panel, index: i }) => (
+                <Pressable onPress={() => router.push(`/section/${section.id}/comic`)}>
                   {panel.uri ? (
                     <Image
                       source={{ uri: panel.uri }}
                       style={{ width: 132, height: 132, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
                       contentFit="cover"
+                      recyclingKey={panel.id}
                     />
                   ) : (
                     <View
@@ -352,8 +373,8 @@ export default function SectionScreen() {
                     Panel {i + 1}
                   </Body>
                 </Pressable>
-              ))}
-            </ScrollView>
+              )}
+            />
             <Body muted style={{ fontSize: 12, marginTop: 8 }}>
               {section.comicSheets.length
                 ? `${section.comic.length} scenes on ${section.comicSheets.length === 1 ? 'a whole comic page' : `${section.comicSheets.length} comic pages`}`

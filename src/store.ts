@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { libraryStorage } from './lib/storage';
 import type {
   Book,
   BookStatus,
@@ -311,7 +311,7 @@ export const useLibrary = create<Store>()(
     }),
     {
       name: 'book-friend-v1',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => libraryStorage),
       version: 2,
       // v1 had review cards and no comic panels.
       migrate: (persisted: any, from) => {

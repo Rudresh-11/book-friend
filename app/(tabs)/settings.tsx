@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Chip, Field, Label, Row, SectionHeading } from '../../src/components/ui';
 import { notify } from '../../src/lib/alert';
-import { COPY_PICKED_FILE, exportBackup, readTextFile } from '../../src/lib/files';
+import { exportLibraryZip, exportLibraryZipStreaming, humanSize, importLibraryZip } from '../../src/lib/archive';
+import { COPY_PICKED_FILE, exportBackup, readBytesFile, readTextFile } from '../../src/lib/files';
+import { librarySizeBytes } from '../../src/lib/storage';
 import { isOcrAvailable } from '../../src/lib/ocr';
 import { useLibrary } from '../../src/store';
 import { useTheme } from '../../src/theme';
@@ -19,39 +21,74 @@ export default function Settings() {
   const [flavour, setFlavour] = useState(settings.promptFlavour);
   const [goal, setGoal] = useState(String(settings.dailyGoalMinutes));
   const [language, setLanguage] = useState(settings.language);
+  const [busy, setBusy] = useState<string | null>(null);
 
+  const library = { books: state.books, sections: state.sections, sessions: state.sessions, settings: state.settings };
+
+  /** The whole library — pictures and all — as one movable zip. */
   const doExport = async () => {
+    if (busy) return;
+    setBusy('Packing your library…');
     try {
-      const json = JSON.stringify(
-        { books: state.books, sections: state.sections, sessions: state.sessions, settings: state.settings },
-        null,
-        2
+      // streaming keeps memory to one picture at a time; web has no file handles,
+      // so it builds the archive in memory instead
+      const pack = Platform.OS === 'web' ? exportLibraryZip : exportLibraryZipStreaming;
+      const { pictures, bytes } = await pack(library, (done, total, label) =>
+        setBusy(total ? `${label} ${done}/${total}` : label)
       );
-      await exportBackup(json);
+      setBusy(null);
+      notify(
+        'Backup ready',
+        `${state.books.length} books and ${pictures} pictures, ${humanSize(bytes)}. Keep it somewhere safe — it restores onto any phone.`
+      );
+    } catch (e: any) {
+      setBusy(null);
+      notify('Export failed', e?.message ?? 'Unknown error');
+    }
+  };
+
+  /** Text-only escape hatch, for reading the data somewhere else. */
+  const doExportJson = async () => {
+    try {
+      await exportBackup(JSON.stringify(library, null, 2));
     } catch (e: any) {
       notify('Export failed', e?.message ?? 'Unknown error');
     }
   };
 
   const doImport = async () => {
+    if (busy) return;
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
+        // both kinds of backup, plus a catch-all for pickers that report zips oddly
+        type: ['application/zip', 'application/json', '*/*'],
         copyToCacheDirectory: COPY_PICKED_FILE,
       });
       if (res.canceled || !res.assets?.[0]) return;
-      const text = await readTextFile(res.assets[0]);
-      const data = JSON.parse(text);
+      const asset = res.assets[0];
+      const isZip = /\.zip$/i.test(asset.name ?? '') || asset.mimeType === 'application/zip';
+
+      setBusy('Reading the backup…');
+      const restore = isZip
+        ? await importLibraryZip(await readBytesFile(asset), (done, total, label) =>
+            setBusy(total ? `${label} ${done}/${total}` : label)
+          )
+        : { state: JSON.parse(await readTextFile(asset)), pictures: 0 };
+      setBusy(null);
+
+      const data = restore.state;
       if (!Array.isArray(data.books)) throw new Error('That file is not a Book Friend backup.');
+
       notify(
         'Replace everything?',
-        `The backup holds ${data.books.length} books. Your current library is replaced.`,
+        `The backup holds ${data.books.length} books${restore.pictures ? ` and ${restore.pictures} pictures` : ''}. Your current library is replaced.`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Restore', style: 'destructive', onPress: () => replaceAll(data) },
         ]
       );
     } catch (e: any) {
+      setBusy(null);
       notify('Import failed', e?.message ?? 'Unknown error');
     }
   };
@@ -141,12 +178,37 @@ export default function Settings() {
       <Card style={{ gap: 12 }}>
         <Body muted style={{ fontSize: 13 }}>
           Everything lives on this phone — {state.books.length} books, {state.sections.length} chapters,{' '}
-          {state.sections.reduce((n, s) => n + s.pages.length, 0)} scans. Back it up somewhere safe now and then.
+          {state.sections.reduce((n, s) => n + s.pages.length, 0)} scans
+          {librarySizeBytes() ? ` · ${humanSize(librarySizeBytes())} of text` : ''}. A backup is a single zip holding the
+          library and every picture, so it restores whole onto another phone.
         </Body>
+        {busy ? (
+          <Row gap={8}>
+            <ActivityIndicator size="small" color={t.accent} />
+            <Body muted style={{ fontSize: 13 }}>{busy}</Body>
+          </Row>
+        ) : null}
         <Row gap={10}>
-          <Button style={{ flex: 1 }} small variant="soft" icon="share-outline" label="Export backup" onPress={doExport} />
-          <Button style={{ flex: 1 }} small variant="soft" icon="download-outline" label="Restore" onPress={doImport} />
+          <Button
+            style={{ flex: 1 }}
+            small
+            variant="soft"
+            icon="archive-outline"
+            label="Back up"
+            disabled={!!busy}
+            onPress={doExport}
+          />
+          <Button
+            style={{ flex: 1 }}
+            small
+            variant="soft"
+            icon="download-outline"
+            label="Restore"
+            disabled={!!busy}
+            onPress={doImport}
+          />
         </Row>
+        <Button small variant="ghost" icon="document-text-outline" label="Export text only (no pictures)" onPress={doExportJson} />
         <Button small variant="danger" icon="trash-outline" label="Erase everything" onPress={confirmWipe} />
       </Card>
 

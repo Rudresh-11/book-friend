@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, View } from 'react-native';
 import { Body, Button, Card, Field, Label, Row, Title } from '../../../src/components/ui';
 import { notify } from '../../../src/lib/alert';
 import { copyText } from '../../../src/lib/clipboard';
@@ -132,7 +132,19 @@ export default function ScanScreen() {
   return (
     <>
       <Stack.Screen options={{ title: sectionLabel(section) }} />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48, gap: 12 }} keyboardShouldPersistTaps="handled">
+      {/* virtualised: only the scans on screen are decoded, so a long chapter
+          cannot run the app out of memory */}
+      <FlatList
+        data={section.pages}
+        keyExtractor={(page) => page.id}
+        contentContainerStyle={{ padding: 16, paddingBottom: 48, gap: 12 }}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={5}
+        maxToRenderPerBatch={5}
+        windowSize={7}
+        removeClippedSubviews
+        ListHeaderComponent={
+          <View style={{ gap: 12 }}>
         <Row gap={10}>
           <Button style={{ flex: 1 }} icon="camera" label="Take photo" onPress={() => capture('camera')} />
           <Button style={{ flex: 1 }} variant="soft" icon="images-outline" label="From gallery" onPress={() => capture('library')} />
@@ -210,8 +222,10 @@ export default function ScanScreen() {
           </Card>
         ) : null}
 
-        {section.pages.map((page, i) => (
-          <Card key={page.id} style={{ gap: 10 }}>
+          </View>
+        }
+        renderItem={({ item: page, index: i }) => (
+          <Card style={{ gap: 10 }}>
             <Row gap={12} style={{ alignItems: 'flex-start' }}>
               <Pressable onPress={() => (page.uri ? setViewing(page) : null)} disabled={!page.uri}>
                 {page.uri ? (
@@ -219,6 +233,7 @@ export default function ScanScreen() {
                     source={{ uri: page.uri }}
                     style={{ width: 76, height: 100, borderRadius: radius.sm, backgroundColor: t.cardAlt }}
                     contentFit="cover"
+                    recyclingKey={page.id}
                   />
                 ) : (
                   <View
@@ -318,8 +333,8 @@ export default function ScanScreen() {
               </Row>
             )}
           </Card>
-        ))}
-      </ScrollView>
+        )}
+      />
 
       {/* full-size viewer */}
       <Modal visible={!!viewing} transparent animationType="fade" onRequestClose={() => setViewing(null)}>
